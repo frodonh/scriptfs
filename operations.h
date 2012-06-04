@@ -21,23 +21,11 @@
 #ifndef  OPERATIONS_INC
 #define  OPERATIONS_INC
 
+#include "procedures.h"
+
 /********************************************/
 /*         DATA TYPES AND FUNCTIONS         */
 /********************************************/
-/**
- * \brief Type of a test function
- *
- * The test function should be called with a path as its parameter and returns 1 if the file at path location is a script, and 0 otherwise.
- */
-typedef int (*Test)(const char*);
-
-/**
- * \brief Type of a script function
- *
- * The script function is called with a parameter giving the path of a script. It executes the script, writes its output on the file with fd descriptor, and returns the error code of the program.
- */
-typedef int (*Program)(const char*,int fd);
-
 /**
  * \brief Persistent data
  *
@@ -46,12 +34,7 @@ typedef int (*Program)(const char*,int fd);
 struct Persistent {
 	char* mirror;	//!< Path to the mirror folder
 	size_t mirror_len;	//!< Length of the mirror string
-	Test test;	//!< Function that will be called to test if a file is a script
-	Program program;	//!< Program to execute on scripts
-	char *program_path;	//!< Path of the external program
-	char **program_args;	//!< Array of arguments to send to the external program before the name of the file
-	char *test_path;	//!< Path of the external program which will be used to test if a file is a script
-	char **test_args;	//!< Array of arguments to send to the test program
+	Procedures *procs;	//!< List of procedures describing what to do with files
 } persistent;	//!< Variable holding all the persistent data needed by the application
 
 /**
@@ -91,29 +74,42 @@ void free_resources();
 /**
  * \brief Test if a file is a shell script
  *
- * This function is one possible implementation of a Test function. This one is used when the script interpretor is the shell. It tests if a particular file is a script by looking at the two first bytes and checking if they are a shebang.
+ * This function is one possible implementation of a TestFunction function. This one is used when the script interpretor is the shell. It tests if a particular file is a script by looking at the two first bytes and checking if they are a shebang.
+ * \param test Pointer to the Test structure from which the function is called. The structure holds data used to locate the test program.
  * \param file Path of the file that has to be tested
  * \return 1 if the file is a shell script, 0 otherwise
  */
-int test_shell(const char *file);
+int test_shell(PTest test,const char *file);
 
 /**
  * \brief Test function that always returns 1
  *
- * This function returns 1 without checking anything on the actual file. It can be used as a script Test function so that every file is interpretated as a script and read by an external program.
+ * This function returns 1 without checking anything on the actual file. It can be used as a script TestFunction function so that every file is interpretated as a script and read by an external program.
+ * \param test Pointer to the Test structure from which the function is called. The structure holds data used to locate the test program.
  * \param file Path of the file, not used
  * \return Always 1
  */
-int test_true(const char *file);
+int test_true(PTest test,const char *file);
+
+/**
+ * \brief Test if a file is executable
+ *
+ * This function is one possible implementation of a TestFunction function. It tests if the file in argument has the executable attribute in the mirror file system.
+ * \param test Pointer to the Test structure from which the function is called. The structure holds data used to locate the test program.
+ * \param file Path of the file that has to be tested
+ * \return 1 if the file is executable, 0 otherwise
+ */
+int test_executable(PTest test,const char *file);
 
 /**
  * \brief Test function that checks the return value of the program
  *
  * This test function only checks the return value of the underlying program. If this value is not 0 (which means an error occurred), the file is not considered as a good script.
+ * \param test Pointer to the Test structure from which the function is called. The structure holds data used to locate the test program.
  * \param file Path of the file which has to be tested
  * \return 1 if the file may be regarded as a script, 0 otherwise
  */
-int test_program(const char *file);
+int test_program(PTest test,const char *file);
 
 /********************************************/
 /*           EXECUTION FUNCTIONS            */
@@ -121,22 +117,35 @@ int test_program(const char *file);
 /**
  * \brief Execute a script with the help of an interpretor
  *
- * This function of the Program type executes a script as it would be done by a shell. It is assumed the file (script) starts with a shebang #!, then the path of the interpretor is written on the same first line. This interpretor is used to execute the script. The function spawns a new process that loads the interpretor. The standard output is redirected to the file which descriptor is given.
+ * This function of the ProgramFunction type executes a script as it would be done by a shell. It is assumed the file (script) starts with a shebang #!, then the path of the interpretor is written on the same first line. This interpretor is used to execute the script. The function spawns a new process that loads the interpretor. The standard output is redirected to the file which descriptor is given.
+ * \param program Pointer to the Program structure from which the function is called. The structure holds data used to locate the executable and get its arguments.
  * \param file Path of the script file
  * \param fd Descriptor of the file on which the output of the program will be written. The file should already be opened and ready to accept input
  * \return Error code of the external program after its execution
  */
-int program_shell(const char *file,int fd);
+int program_shell(PProgram program,const char *file,int fd);
+
+/**
+ * \brief Execute a script as it was an executable by itself
+ *
+ * This function of the ProgramFunction type executes considers a script file to be an executable program by itself and runs it in a new process. The standard output is redirect to the file which descriptor is given.
+ * \param program Pointer to the Program structure from which the function is called. The structure holds data used to locate the executable and get its arguments.
+ * \param file Path of the script file
+ * \param fd Descriptor of the file on which the output of the program will be written. The file should already be opened and ready to accept input
+ * \return Error code of the external program after its execution
+ */
+int program_self(PProgram program,const char *file,int fd);
 
 /**
  * \brief Execute an external program and write its output on given file
  *
- * This function is a simple wrapper of the execute_program function and publishes it as a Program type. It executes the external program on the specified file and redirects its output on the file which descriptor is given.
+ * This function is a simple wrapper of the execute_program function and publishes it as a ProgramFunction type. It executes the external program on the specified file and redirects its output on the file which descriptor is given.
+ * \param program Pointer to the Program structure from which the function is called. The structure holds data used to locate the executable and get its arguments.
  * \param file Path of the file on which the program will be executed. The file will be the last argument of the line which invokes the external program
  * \param fd Descriptor of the file on which the output of the program will be written. The file should already be opened and ready to accept input
  * \return Error code of the external program after its execution
  */
-int program_external(const char *file,int fd);
+int program_external(PProgram program,const char *file,int fd);
 
 /********************************************/
 /*             OTHER OPERATIONS             */
@@ -155,7 +164,7 @@ int is_script(const char *file);
  *
  * This function creates a new process which will execute the external program located at file. The second argument is a file descriptor on which the output will be written. If the descriptor is null, no output will be written at all.
  * \param file Path to the executable file
- * \param args Array of arguments to be added after the name of the program. The array must end with a null pointer. By convention, the first element of the array should be the path of the program itself but this function that not take care of adding the path of the program (file) at the beginning of the array.
+ * \param args Array of arguments to be added after the name of the program. The array must end with a null pointer. By convention, the first element of the array should be the path of the program itself but this function does not take care of adding the path of the program (file) at the beginning of the array.
  * \param fd Descriptor of the file on which the output will be redirected, 0 if no output is required
  * \return Error code of the program after the end of its execution
  */

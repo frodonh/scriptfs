@@ -39,7 +39,6 @@
 
 #define SFS_OPT_KEY(t,u,p) { t ,offsetof(struct options, p ), 1 } , { u ,offsetof(struct options, p ), 1 }	//!< Generate a command-line argument with short name t, long name u. p is an integer variable name and the corresponding variable will be set to 1 if it is found in the arguments
 #define SFS_OPT_KEY2(t,u,p,v) { t ,offsetof(struct options, p ), v } , { u ,offsetof(struct options, p ), v }	//!< Generate a command-line argument with short name t, long name u. p is an integer or string variable name and the corresponding variable will be set to the value of the argument
-#define	MAX_PATH_LENGTH 0x400	//!< Maximal lengths of paths in the file system (used to allocate buffers when needed)
 
 uid_t uid;	//!< Current user ID
 gid_t gid;	//!< Current group ID
@@ -796,19 +795,10 @@ struct fuse_operations sfs_oper = {
  * \brief Main program, mounts file system
  *
  * The main program processes command line arguments and mounts the file system. In addition to standard \e fusermount command parameters, possible command line arguments are:
- * 	- -p path
- * 		--program=path
- * 			Full path to the interpretor of the scripts. If not specified, real script interpretors as uses by the shell (Bash, Python...) will be taken. When a script has to be executed, its full path will always be added at the end of the command line.
- * 	- -a parameters
- * 		--args=parameters
- * 			Command-line options that will be sent to the script interpretor
- * 	- -t path
- * 		--test=path
- * 			Path to an external program that may be used to tell if a file is a script. If not specified, the same file as the program will be used by default. If the program is a standard interpretor (default value), an internal function is used to test is the file starts with a shebang.
- * 	- -b parameters
- * 		--testargs=parameters
- * 			Command-line options that will be sent to the test program (given by the -t option)
- * 	Syntax: scriptfs [-p path|--program=path] [-a parameters|--args=parameters] [-t path|--test=path] [-b parameters|--testargs=parameters] mirror_path mountpoint
+ * 	- -p procedure
+ * 		--procedure=procedure
+ * 			Define an execution procedure. This procedure holds the external executable program and the test program that will be used on files. The command can be repeated as many times as needed, and each procedure will be tested in the order they appear in the command-line. For more information about the way to define a procedure, see \ref syntaxdoc "Syntax of command-line".
+ * 	Syntax: scriptfs [-p procedure|--procedure=procedure...] mirror_path mountpoint
  * 
  * \param argc Number of command line arguments, including the name of the calling program
  * \param argv Array of command line arguments, the first one being the path to the calling program

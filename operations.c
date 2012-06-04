@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "procedures.h"
 #include "operations.h"
 
 /********************************************/
@@ -30,39 +31,23 @@
 void init_resources() {
 	persistent.mirror=0;
 	persistent.mirror_len=0;
-	persistent.test=0;
-	persistent.program=0;
-	persistent.program_path=0;
-	persistent.program_args=0;
-	persistent.test_path=0;
-	persistent.test_args=0;
+	persistent.procs=(Procedures*)malloc(sizeof(Procedures));
 }
 
 void free_resources() {
 	free(persistent.mirror);
 	free(persistent.program_path);
-	char **p;
-	if (persistent.program_args!=0) {
-		p=persistent.program_args;
-		while (*p!=0) free(*(p++));
-		free(persistent.program_args);
-	}
-	free(persistent.test_path);
-	if (persistent.test_args!=0) {
-		p=persistent.test_args;
-		while (*p!=0) free(*(p++));
-		free(persistent.test_args);
-	}
+	free_procedures(persistent.procs);
 }
 
 /********************************************/
 /*              TEST FUNCTIONS              */
 /********************************************/
-int test_true(const char *file) {
+int test_true(PTest test,const char *file) {
 	return 1;
 }
 
-int test_shell(const char *file) {
+int test_shell(PTest test,const char *file) {
 	FILE *f=fopen(file,"r");
 	if (f==0) return 0;
 	char magic[2];
@@ -72,29 +57,22 @@ int test_shell(const char *file) {
 	return 1;
 }
 
-int test_program(const char *file) {
-	// Create the array of arguments of the program by adding the reference to the file at the very end of it and the path of the program at the beginning
-	size_t num=0;
-	const char **args=(const char**)persistent.test_args;
-	while (*args!=0) {++args;++num;}
-	const char **newargs=(const char**)malloc((num+2)*sizeof(char*));
-	args=(const char**)persistent.test_args;
-	const char **na=newargs;
-	*(na++)=persistent.program_path;
-	while (*args!=0) {*(na++)=*(args++);}
-	*(na++)=file;
-	*na=0;
+int test_executable(PTest test,const char *file) {
+	return access(file,X_OK)==0;
+}
+
+int test_program(PTest test,const char *file) {
+	// Create the array of arguments of the program by replacing the exclamation mark with the name of the file
+	if (test->args!=0 && test->filearg!=0) *(test->filearg)=file;
 	// Launch the program
-	int code=execute_program(persistent.test_path,newargs,0);
-	// Release memory and exit
-	free(newargs);
+	int code=execute_program(test->path,test->args,0);
 	return (code==0);
 }
 
 /********************************************/
 /*           EXECUTION FUNCTIONS            */
 /********************************************/
-int program_shell(const char *file,int fd) {
+int program_shell(PProgram program,const char *file,int fd) {
 	FILE *f=fopen(file,"r");
 	if (f==0) return 1;
 	char *line=0;
@@ -113,22 +91,17 @@ int program_shell(const char *file,int fd) {
 	return code;
 }
 
-int program_external(const char *file,int fd) {
-	// Create the array of arguments of the program by adding the reference to the file at the very end of it and the path of the program at the beginning
-	size_t num=0;
-	const char **args=(const char**)persistent.program_args;
-	while (*args!=0) {++args;++num;}
-	const char **newargs=(const char**)malloc((num+2)*sizeof(char*));
-	args=(const char**)persistent.program_args;
-	const char **na=newargs;
-	*(na++)=persistent.program_path;
-	while (*args!=0) {*(na++)=*(args++);}
-	*(na++)=file;
-	*na=0;
+int program_self(PProgram program,const char *file,int fd) {
+	const char *args[]={file,0};
+	int code=execute_program(file,args,fd);
+	return code;
+}
+
+int program_external(PProgram program,const char *file,int fd) {
+	// Create the array of arguments of the program by replacing the exclamation mark with the name of the file
+	if (program->args!=0 && program->filearg!=0) *(program->filearg)=file;
 	// Launch the program
-	int code=execute_program(persistent.program_path,newargs,fd);
-	// Release memory and exit
-	free(newargs);
+	int code=execute_program(program->path,program->args,fd);
 	return code;
 }
 

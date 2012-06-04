@@ -1,0 +1,36 @@
+/*!
+\page syntaxdoc Syntax of command-line to call the program
+\section sec1 Command line
+The new filesystem is mounted with the following command:
+<tt>scriptfs [options] mirror_path mountpoint</tt>
+
+\section sec2 Mandatory arguments
+<dl>
+	<dt>\c mirror_path</dt> <dd>Path of the original folder which will be replicated in the virtual file system</dd>
+	<dt>\c mountpoint</dt> <dd>Path of the mount point folder. The folder should be empty before using the command, otherwise existing files will not be accessible any longer.</dd>
+</dl>
+
+\section sec3 Optional arguments
+Optional arguments are used to define which files have to be considered as scripts and what to do with them. Two types of executable files should be provided:
+	- <b>Program files</b> define the program that has to be called on each detected script file to transform its contents;
+	- <b>Test files</b> are also executable files that point to programs used to detect if a file is a script.
+
+For each script file detected as such, the program file is executed and its standard output is captured and sent back as the content of the virtual file (replacing the content of the original script file on the mirror file system). Standard error is left unchanged and written to the standard error of the filesystem program (thus enabling to log errors on a file).
+
+<dl>
+	<dt><tt>-p program[;test]</tt></dt>	<dd>Define an executable program and a corresponding test program to use. The command may be repeated several times to define other executable programs. When this is the case, each description will be used in the order they are defined to detect if the file is a script. As soon as the file is detected by a script, the corresponding program is executed on it. The other remaining definitions are not used. \c program can be either of the following string.
+	- Full command line. If \c program is a full shell command-line (starting with the name of an executable program, with arguments), the corresponding program, located by the first word on the command-line is used on each script file, detected as such by the test program. All the arguments are used as they are written. If the command-line holds the "!" character, it is replaced by the name of the script file. If no such character is found, the content of the script file is provided as the standard input of the external program. 
+	- \c auto. When the \c auto string is found, the filesystem behaves almost as would a standard shell do, that is each file is read to find if it is a proper executable script (starting with a shebang <tt>#!</tt>). No test program has to be provided, and if one is provided, it will be ignored. The string after <tt>#!</tt> defines the path of the executable program that will be launched to execute the content of the script.
+	- \c self. When the \c self string is found, the script file is used as the program file itself, that is it is executed with no other argument and its output is returned.
+
+	\c test is an optional part of the description and can be one of the following:
+	- Full command line. The behaviour is similar to the one used when \c program is a full command-line. The command-line is used on each file to detect if it is a script. All the arguments are used as they are written. If the command-line holds the "!" character, it is replaced by the name of the file. If no such character is found, the content of the file is provided as the standard input of the test program. The standard output of the test program is discarded. Since the test program is executed on every file on the filesystem, it should be quite fast. A file is recognized as a script if the exit code of the test program is zero (normal exit). Otherwise, it is not considered as a script.
+	- \c always. When the \c always string is read, all the files in the virtual file system are considered as script files.
+	- \c executable. When the \c executable string is found, only files that the current user can execute are considered as script files.
+	- Pattern. A pattern is a single word that contains at least a wildcard (*, ?). The full name of the file (including the path) is tested against the pattern and if it matches, the file is considered as a script file.
+
+	If no test procedure is provided and the program procedure is a full command-line, the same command-line will be used as the test program. Thus every file will first be executed to detect if they should be regarded as script files. If the program procedure is \c self, and no test procedure is provided, the \c executable mode will be used for the test procedure, and only executable files will be considered as script files.
+</dl>
+
+When no procedure (<tt>-p</tt>) is set, the program behaves as is only one procedure <tt>-p auto</tt> was used.
+*/

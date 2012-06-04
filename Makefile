@@ -23,7 +23,7 @@ PROJECT=scriptfs
 
 all:$(BIN)/$(PROJECT)
 
-$(BIN)/$(PROJECT):$(PROJECT).c $(BIN)/operations.o
+$(BIN)/$(PROJECT):$(PROJECT).c $(BIN)/procedures.o $(BIN)/operations.o
 	@echo --------------- Linking of executable ---------------
 	@$(CC) $(CFLAGS) -o $(BIN)/$(PROJECT) $^ $(LFLAGS)
 
