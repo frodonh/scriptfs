@@ -36,25 +36,13 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include "operations.h"
+#include "procedures.h"
 
 #define SFS_OPT_KEY(t,u,p) { t ,offsetof(struct options, p ), 1 } , { u ,offsetof(struct options, p ), 1 }	//!< Generate a command-line argument with short name t, long name u. p is an integer variable name and the corresponding variable will be set to 1 if it is found in the arguments
 #define SFS_OPT_KEY2(t,u,p,v) { t ,offsetof(struct options, p ), v } , { u ,offsetof(struct options, p ), v }	//!< Generate a command-line argument with short name t, long name u. p is an integer or string variable name and the corresponding variable will be set to the value of the argument
 
 uid_t uid;	//!< Current user ID
 gid_t gid;	//!< Current group ID
-
-/**
- * \brief Options parsed from the command line
- *
- * This structure holds all the information that has been parsed from the command line. Those data especially hold the location of the script interpretor.
- */
-struct options {
-	char* program;	//!< Full path of the script interpretor	
-	char* args;	//!< Command-line options that have to be sent to the script
-	char* test;	//!< Path to an external program used to test if a file is a script
-	char* testargs;	//!< Command-line options that have to be sent to the test program
-	char* path;	//!< Path of the mirror folder on disk
-} options;	//!< Variable holding the options parsed from the command line, it is released when the file system is mounted.
 
 /**
  * \brief Display a brief help about the syntax and exit the program
@@ -65,10 +53,7 @@ struct options {
 void print_usage(int code) {
 	printf("Syntax: scriptfs [arguments] mirror_folder mount_point\n");
 	printf("Arguments:\n");
-	printf("	-p path | --program=path\n\t\tPath of script interpretor\n");
-	printf("	-a args | --arguments=args\n\t\tCommand line arguments of the script interpretor\n");
-	printf("	-t path | --test=path\n\t\tPath of an optional program used to test if a file is a script\n");
-	printf("	-b path | --testargs=path\n\t\tCommand line arguments of the test program\n");
+	printf("	-p program[;test]\n\t\tAdd a procedure which tells what to do with files\n");
 	printf("	mirror_folder\n\t\tActual folder on the disk that will be the base folder of the mounted structure\n");
 	printf("	mount_point\n\t\tFolder that will be used as the mount point\n");
 	exit(code);
@@ -119,51 +104,6 @@ void *sfs_init(struct fuse_conn_info *conn) {
 	// Setup connection
 	conn->async_read=0;
 	conn->want=0;
-	// Prepare persistent data structure
-	if (options.path!=0) {
-		persistent.mirror=realpath(options.path,0);
-		persistent.mirror_len=strlen(persistent.mirror);
-	}
-	if (options.program!=0) {	// If program has been defined in option, save it in the persistent data
-		persistent.program_path=realpath(options.program,0);
-		free(options.program);
-	}
-	if (options.args!=0) {	// If program arguments have been defined in option, tokenize them and save them in the persistent data
-		tokenize(options.args,&(persistent.program_args));
-		free(options.args);
-	}
-	if (options.testargs!=0) {	// If test arguments have been defined in option, tokenize them and save them in the persistent data. Otherwise, if no test function has been defined (and the program itself will therefore be used as the test function), copy the program args in the test args.
-		tokenize(options.testargs,&(persistent.test_args));
-		free(options.testargs);
-	} else {
-		if (options.test==0 && persistent.program_path!=0 && persistent.program_args!=0) {
-			size_t num=0;
-			char **s=persistent.program_args;
-			while (*s!=0) {++num;++s;}
-			persistent.test_args=(char**)malloc((num+1)*sizeof(char*));
-			char **s2=persistent.test_args;
-			s=persistent.program_args;
-			while (*s!=0) {
-				*s2=(char*)malloc(strlen(*s)+1);
-				strcpy(*s2,*s);
-				++s;
-				++s2;
-			}
-			*s2=0;
-		}
-	}
-	if (options.test!=0) {	// If test program has been defined in option, save it in the persistent data. If no test program was defined but there is an execution program, take the execution program as the test program. If no execution program was used, the files will be considered as shell scripts.
-		persistent.test_path=realpath(options.test,0);
-		free(options.test);
-	} else {
-		if (persistent.program_path!=0) {
-			persistent.test_path=(char*)malloc(strlen(persistent.program_path)+1);
-			strcpy(persistent.test_path,persistent.program_path);
-		}
-	}
-	if (persistent.program_path!=0) persistent.program=&program_external; else persistent.program=&program_shell;
-	if (persistent.test_path!=0) persistent.test=&test_program; else persistent.test=&test_shell;
-	// Initialize cache of files
 	return 0;
 }
 
@@ -177,7 +117,6 @@ void sfs_destroy(void *private_data) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_destroy\n");
 #endif
-	free_resources();
 }
 
 /**
@@ -809,46 +748,40 @@ int main(int argc,char **argv) {
 	uid=geteuid();
 	gid=getegid();
 	// Parse command line arguments
-	memset(&options,0,sizeof(struct options));
+	init_resources();
 	size_t i;
-	for (i=1;i<argc && argv[i][0]=='-';++i)
-		if (argv[i][1]=='o') ++i;
+	Procedures *last=0;
+	for (i=1;i<argc && argv[i][0]=='-';++i) {
+		if (argv[i][1]=='o') ++i;	// Skip -o options parameters
+		else if (argv[i][1]=='p') { // Parse -p options parameters
+			++i;
+			Procedure *proc=get_procedure_from_string(argv[i]);
+			if (proc!=0) {
+				Procedures *procs=(Procedures*)malloc(sizeof(Procedures));
+				procs->procedure=proc;
+				procs->next=0;
+				if (last==0) persistent.procs=procs; else last->next=procs;
+				last=procs;
+			}
+		}
+	}
 	if ((argc-i)!=2) print_usage(EINVAL);
-	options.path=argv[i];
+	persistent.mirror=realpath(argv[i],0);
+	persistent.mirror_len=strlen(persistent.mirror);
 	argv[i]=argv[i+1];
 	argc--;
-	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-	struct fuse_opt opts[]={
-		SFS_OPT_KEY2("-p %s","--program=%s",program,-1),
-		SFS_OPT_KEY2("-a %s","--args=%s",args,-1),
-		SFS_OPT_KEY2("-t %s","--test=%s",test,-1),
-		SFS_OPT_KEY2("-b %s","--testargs=%s",testargs,-1),
-		FUSE_OPT_END
-	};
-	if (fuse_opt_parse(&args,&options,opts,0)==-1) return 1;
-	// Test if optional programs and mirror folder are real paths
-	struct stat fileinfo;
-	if (options.program!=0) {
-		stat(options.program,&fileinfo);
-		if (!(S_ISREG(fileinfo.st_mode) && access(options.program,X_OK))) {
-			fprintf(stderr,"%s can not be found or executed\n",options.program);
-			exit(EINVAL);
-		}
+	// Check if no valid procedure was set. In that case, automatically provide a standard procedure
+	if (persistent.procs==0) {
+		persistent.procs=(Procedures*)malloc(sizeof(Procedures));
+		persistent.procs->program=(Program*)malloc(sizeof(Program));
+		persistent.procs->program->path=0;
+		persistent.procs->program->args=0;
+		persistent.procs->program->filearg=0;
+		persistent.procs->program->func=&program_shell;
+		persistent.procs->test=0;
 	}
-	if (options.test!=0) {
-		stat(options.test,&fileinfo);
-		if (!(S_ISREG(fileinfo.st_mode) && access(options.test,X_OK))) {
-			fprintf(stderr,"%s can not be found or executed\n",options.test);
-			exit(EINVAL);
-		}
-	}
-	stat(options.path,&fileinfo);
-	if (!(S_ISDIR(fileinfo.st_mode) && (access(options.path,X_OK)==0))) {
-			fprintf(stderr,"Invalid mirror folder:%s\n",options.path);
-			exit(EINVAL);
-	}	
 	// Daemonize the program
 	int code=fuse_main(args.argc,args.argv,&sfs_oper,0);
-	fuse_opt_free_args(&args);
+	free_resources();
 	return code;
 }

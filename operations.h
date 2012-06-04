@@ -75,7 +75,7 @@ void free_resources();
  * \brief Test if a file is a shell script
  *
  * This function is one possible implementation of a TestFunction function. This one is used when the script interpretor is the shell. It tests if a particular file is a script by looking at the two first bytes and checking if they are a shebang.
- * \param test Pointer to the Test structure from which the function is called. The structure holds data used to locate the test program.
+ * \param test Pointer to the Test structure from which the function is called.
  * \param file Path of the file that has to be tested
  * \return 1 if the file is a shell script, 0 otherwise
  */
@@ -85,21 +85,41 @@ int test_shell(PTest test,const char *file);
  * \brief Test function that always returns 1
  *
  * This function returns 1 without checking anything on the actual file. It can be used as a script TestFunction function so that every file is interpretated as a script and read by an external program.
- * \param test Pointer to the Test structure from which the function is called. The structure holds data used to locate the test program.
+ * \param test Pointer to the Test structure from which the function is called.
  * \param file Path of the file, not used
  * \return Always 1
  */
 int test_true(PTest test,const char *file);
 
 /**
+ * \brief Test function that always returns 0
+ *
+ * This function returns 0 without checking anything on the actual file. It can be used as a script TestFunction function so that no file is interpretated as a script.
+ * \param test Pointer to the Test structure from which the function is called.
+ * \param file Path of the file, not used
+ * \return Always 0
+ */
+int test_false(PTest test,const char *file);
+
+/**
  * \brief Test if a file is executable
  *
  * This function is one possible implementation of a TestFunction function. It tests if the file in argument has the executable attribute in the mirror file system.
- * \param test Pointer to the Test structure from which the function is called. The structure holds data used to locate the test program.
+ * \param test Pointer to the Test structure from which the function is called.
  * \param file Path of the file that has to be tested
  * \return 1 if the file is executable, 0 otherwise
  */
 int test_executable(PTest test,const char *file);
+
+/**
+ * \brief Test a file by matching its full name against a regular expression
+ *
+ * This function is one possible implementation of a TestFunction function. It matches the name of the file in argument with the regular expression hold by the test variable. A regular expression is a standard POSIX basic regular expression. It accepts characters like ., *, ?, +,... See also the man page of grep for more details about basic regular expressions.
+ * \param test Pointer to the Test structure from which the function is called.
+ * \param file Path of the file that has to be tested
+ * \return 1 if the file matches the regular expression, 0 otherwise
+ */
+int test_pattern(PTest test,const char *file);
 
 /**
  * \brief Test function that checks the return value of the program

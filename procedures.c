@@ -18,9 +18,14 @@
  * =====================================================================================
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <rexeg.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "procedures.h"
 #include "operations.h"
 
@@ -132,17 +137,26 @@ void free_program(Program *program) {
 Program *get_program_from_string(const char *str) {
 	if (str==0) return 0;
 	Program *prog=(Program*)malloc(sizeof(Program));
+	prog->path=0;
+	prog->args=0;
+	prog->filearg=0;
 	if (*str==0 || strncasecmp(str,"AUTO",4)==0) {	// Read program from the first line of the file
-		prog->path=0;
-		prog->args=0;
 		prog->func=&program_shell;
 	} else if (strncasecmp(str,"SELF",4)==0) {	// The file is the program itself
-		prog->path=0;
-		prog->args=0;
 		prog->func=&program_self;
 	} else {	// The program is located by a path name
 		tokenize_command(str,&(prog->path),&(prog->args),&(prog->filearg));
-		prog->func=&program_external;
+		if (prog->path!=0) {
+			struct stat fileinfo;
+			stat(prog->path,&fileinfo);
+			if (!(S_ISREG(fileinfo.st_mode) && access(prog->path,X_OK))) {
+				fprintf(stderr,"%s can not be found or executed\n",prog.path);
+			} else prog->func=&program_external;
+		}
+	}
+	if (prog->func==0) {	// If no program function was set, clear the structure
+		free_program(prog);
+		prog=0;
 	}
 	return prog;
 }
@@ -158,25 +172,47 @@ void free_test(Test *test) {
 		while (*a) free(*(a++));
 		free(test->args);
 	}
+	if (test->compiled) regfree(test->compiled);
+	free(test->compiled);
 	free(test);
 }
 
 Test *get_test_from_string(const char *str) {
 	if (str==0) return 0;
 	Test *test=(Test*)malloc(sizeof(Test));
+	test->path=0;
+	test->args=0;
+	test->filearg=0;
+	test->compiled=0;
+	test->func=0;
 	if (*str==0 || strncasecmp(str,"ALWAYS",6)==0) {	// Consider all files are executable
-		test->path=0;
-		test->args=0;
 		test->func=test_true;
 	} else if (strncasecmp(str,"EXECUTABLE",10)==0) {	// Only files marked as executable in the mirror file system are considered as executable
-		test->path=0;
-		test->args=0;
 		test->func=test_executable;
+	} else if (*str=='^') {	// A regexp is used to select the names of the files
+		regex_t *reg=(regex_t*)malloc(sizeof(regex_t));
+		if (regcomp(reg,str+1,REG_NOSUB)!=0) {	// If the regular expression is invalid, no file is recognized as a script
+			test->func=test_false;
+			free(reg);
+		} else {
+			test->func=test_pattern;
+			test->compiled=reg;
+		}
 	} else {	// The program is located by a path name
-		tokenize_command(str,&(prog->path),&(prog->args),&(prog->filearg));
-		prog->func=&program_external;
+		tokenize_command(str,&(test->path),&(test->args),&(test->filearg));
+		if (test->path!=0) {
+			struct stat fileinfo;
+			stat(test->path,&fileinfo);
+			if (!(S_ISREG(fileinfo.st_mode) && access(test->path,X_OK))) {
+				fprintf(stderr,"%s can not be found or executed\n",test.path);
+			} else test->func=&test_program;
+		}
 	}
-	return prog;
+	if (test->func==0) {	// If no test function was set, clear the structure
+		free_test(test);
+		test=0;
+	}
+	return test;
 }
 
 /********************************************/
@@ -202,7 +238,7 @@ Procedure* get_procedure_from_string(const char* str) {
 	proc->program=get_program_from_string(q);
 	free(q);
 	// Read test
-	if (*p==0) test=0; else {
+	if (*p==0) test=0; else if (proc->program!=0) {
 		str=p+1;
 		p=str;
 		while (*p!=0) ++p;
@@ -211,6 +247,11 @@ Procedure* get_procedure_from_string(const char* str) {
 		q[p-str]=0;
 		proc->test=get_test_from_string(q);
 		free(q);
+	}
+	// If nothing was declared, release the Procedure structure
+	if (proc->program==0) {
+		free(proc);
+		proc=0;
 	}
 	// Return the Procedure object
 	return proc;

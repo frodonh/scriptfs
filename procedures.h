@@ -24,6 +24,8 @@
 #define	MAX_PATH_LENGTH 0x400	//!< Maximal lengths of paths in the file system (used to allocate buffers when needed)
 #define	MAX_ARGS_NUMBER 0x100 //!< Maximum number of arguments in a command
 
+#include <regex.h>
+
 /********************************************/
 /*                FUNCTIONS                 */
 /********************************************/
@@ -87,6 +89,7 @@ typedef struct Test {
 	char *path;	//!< Full path to the test program, null if the test is not a program (see also \ref syntaxdoc "Syntax of command-line").
 	char **args;	//!< Array of arguments to send to the program. This variable is null if no external program is defined. If an exclamation mark has been found in the array of arguments, it is replaced by a null element. The filearg variable points to the position of this null element. The last element of the array must be a null pointer. The first element of the array is the name of the executable itself (to comply with the standard way to call a program).
 	char **filearg;	//!< If there is an exclamation mark in args, the variable points to the element holding this exclamation mark
+	regex_t *compiled;	//!< If the Test function is actually a match against a regular expression, holds the compiled value of the regular expression, otherwise null
 	TestFunction *func;	//!< Pointer to the test function
 } Test;
 

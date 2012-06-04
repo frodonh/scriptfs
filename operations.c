@@ -31,7 +31,7 @@
 void init_resources() {
 	persistent.mirror=0;
 	persistent.mirror_len=0;
-	persistent.procs=(Procedures*)malloc(sizeof(Procedures));
+	persistent.procs=0;
 }
 
 void free_resources() {
@@ -43,9 +43,8 @@ void free_resources() {
 /********************************************/
 /*              TEST FUNCTIONS              */
 /********************************************/
-int test_true(PTest test,const char *file) {
-	return 1;
-}
+int test_true(PTest test,const char *file) {return 1;}
+int test_false(PTest test,const char *file) {return 0;}
 
 int test_shell(PTest test,const char *file) {
 	FILE *f=fopen(file,"r");
@@ -59,6 +58,11 @@ int test_shell(PTest test,const char *file) {
 
 int test_executable(PTest test,const char *file) {
 	return access(file,X_OK)==0;
+}
+
+int test_pattern(PTest test,const char *file) {
+	if (test->compiled==0) return 0;
+	return regexec(test->compiled,file,0,0,0)==0;
 }
 
 int test_program(PTest test,const char *file) {
