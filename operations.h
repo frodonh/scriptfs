@@ -171,23 +171,25 @@ int program_external(PProgram program,const char *file,int fd);
 /*             OTHER OPERATIONS             */
 /********************************************/
 /**
- * \brief Tells if the file in argument is actually a script
+ * \brief Find the script associated with a file
  *
- * This function tests the file in argument and tells if it is a script. Since it is called very often (each time a folder is explored and a file is opened), it should be very fast and not really too much on external programs.
+ * This function tests the file in argument and tells if it is a script. It goes through all the procedures in the list given as argument, in the order in which they are stored. As soon as a test succeeds, the file is recognized as a script and a pointer to the corresponding procedure is returned. If no matching procedure is found, the function returns a null pointer. Since it is called very often (each time a folder is explored and a file is opened), it should be very fast and not rely too much on external programs.
+ * \param procs List of procedures that will be tested against the file
  * \param file Full path of the actual file
- * \return 1 if the file is a script, 0 otherwise
+ * \return Pointer to a procedure which test function succeeds when applied to the file, null if no procedure is found
  */
-int is_script(const char *file);
+Procedure* get_script(const Procedures *procs,const char *file);
 
 /**
  * \brief Spawn a process that executes an external program
  *
- * This function creates a new process which will execute the external program located at file. The second argument is a file descriptor on which the output will be written. If the descriptor is null, no output will be written at all.
+ * This function creates a new process which will execute the external program located at file. The third argument is a file descriptor on which the output will be written. If the descriptor is null, no output will be written at all. The last argument is a full path to a file which content should be provided on the standard input of the external program. If nothing has to be sent to the external program, the user should give a null value to this parameter.
  * \param file Path to the executable file
  * \param args Array of arguments to be added after the name of the program. The array must end with a null pointer. By convention, the first element of the array should be the path of the program itself but this function does not take care of adding the path of the program (file) at the beginning of the array.
- * \param fd Descriptor of the file on which the output will be redirected, 0 if no output is required
+ * \param out Descriptor of the file on which the output will be redirected, 0 if no output is required
+ * \param path_in Path of the file that should be provided to the standard output, 0 if no file has to be provided
  * \return Error code of the program after the end of its execution
  */
-int execute_program(const char *file,const char **args,int fd);
+int execute_program(const char *file,const char **args,int out,const char *path_in);
 
 #endif   /* ----- #ifndef OPERATIONS_INC  ----- */

@@ -136,7 +136,7 @@ int sfs_getattr(const char *path,struct stat *stbuf) {
 	strcpy(fullpath,persistent.mirror);
 	strcpy(fullpath+persistent.mirror_len,path);
 	int code=lstat(fullpath,stbuf);
-	if (code==0 && S_ISREG(stbuf->st_mode) && (stbuf->st_mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && persistent.test(fullpath)) stbuf->st_mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));	// If the file is a script, remove write access to everyone (for now we don't handle writing on scripts)
+	if (code==0 && S_ISREG(stbuf->st_mode) && (stbuf->st_mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && get_script(persistent.procs,fullpath)!=0) stbuf->st_mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));	// If the file is a script, remove write access to everyone (for now we don't handle writing on scripts)
 	return (code==0)?0:-errno;
 }
 
@@ -181,7 +181,7 @@ int sfs_access(const char *path,int mask) {
 		struct stat stbuf;
 		int code2=stat(fullpath,&stbuf);
 		if (code2!=0) return -code2;	// Normally, that should not happen
-		if (S_ISREG(stbuf.st_mode) && persistent.test(fullpath)) return -1;
+		if (S_ISREG(stbuf.st_mode) && get_script(persistent.procs,fullpath)!=0) return -1;
 	}
 	return (code==0)?0:-errno;
 }
@@ -433,7 +433,7 @@ int sfs_chmod(const char *path,mode_t mode) {
 	strcpy(fullpath+persistent.mirror_len,path);
 	struct stat stbuf;
 	int code=stat(fullpath,&stbuf);
-	if (code==0 && S_ISREG(stbuf.st_mode) && (mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && persistent.test(fullpath)) mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));	// If the file is a script, remove write access to the requested permissions
+	if (code==0 && S_ISREG(stbuf.st_mode) && (mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && get_script(persistent.procs,fullpath)!=0) mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));	// If the file is a script, remove write access to the requested permissions
 	code=chmod(fullpath,mode);
 	return (code==0)?0:-errno;
 }
@@ -456,7 +456,7 @@ int sfs_truncate(const char *path,off_t size) {
 	strcpy(fullpath+persistent.mirror_len,path);
 	struct stat stbuf;
 	int code=stat(fullpath,&stbuf);
-	if (code==0 && S_ISREG(stbuf.st_mode) && persistent.test(fullpath)) return -EACCES;	// Writing on a script is forbidden
+	if (code==0 && S_ISREG(stbuf.st_mode) && get_script(persistent.procs,fullpath)!=0) return -EACCES;	// Writing on a script is forbidden
 	code=truncate(fullpath,size);
 	return (code==0)?0:-errno;
 }
@@ -500,7 +500,7 @@ int sfs_utimens(const char *path,const struct timespec ts[2]) {
 	strcpy(fullpath+persistent.mirror_len,path);
 	struct stat stbuf;
 	int code=stat(fullpath,&stbuf);
-	if (code==0 && S_ISREG(stbuf.st_mode) && persistent.test(fullpath)) return -EACCES;	// Writing on a script is forbidden
+	if (code==0 && S_ISREG(stbuf.st_mode) && get_script(persistent.procs,fullpath)!=0) return -EACCES;	// Writing on a script is forbidden
 	code=utimensat(AT_FDCWD,fullpath,ts,0);
 	return (code==0)?0:-errno;
 }
@@ -539,13 +539,14 @@ int sfs_open(const char *path,struct fuse_file_info *fi) {
 	strcpy(fullpath+persistent.mirror_len,path);
 	int handle=0;
 	int typ=0;
-	if (persistent.test(fullpath)) {	// If the file is a script, the interpretor is executed to produce the result of the script
+	Procedure *proc=get_script(persistent.procs,fullpath);
+	if (proc!=0) {	// If the file is a script, the interpretor is executed to produce the result of the script
 		if ((fi->flags & O_WRONLY)!=0 || (fi->flags & O_RDWR)!=0) return -EACCES; 	// If the caller requests to open the file in one of the write modes, immediatly abort the opening
 		char temp_filename[]="/tmp/sfs.XXXXXX";
 		handle=mkstemp(temp_filename);
 		if (handle==0) return -errno;
 		unlink(temp_filename);
-		persistent.program(fullpath,handle);
+		proc->program->func(proc->program,fullpath,handle);
 		typ=1;
 	} else {
 		handle=open(fullpath,O_RDWR);
@@ -773,15 +774,15 @@ int main(int argc,char **argv) {
 	// Check if no valid procedure was set. In that case, automatically provide a standard procedure
 	if (persistent.procs==0) {
 		persistent.procs=(Procedures*)malloc(sizeof(Procedures));
-		persistent.procs->program=(Program*)malloc(sizeof(Program));
-		persistent.procs->program->path=0;
-		persistent.procs->program->args=0;
-		persistent.procs->program->filearg=0;
-		persistent.procs->program->func=&program_shell;
-		persistent.procs->test=0;
+		persistent.procs->procedure->program=(Program*)malloc(sizeof(Program));
+		persistent.procs->procedure->program->path=0;
+		persistent.procs->procedure->program->args=0;
+		persistent.procs->procedure->program->filearg=0;
+		persistent.procs->procedure->program->func=&program_shell;
+		persistent.procs->procedure->test=0;
 	}
 	// Daemonize the program
-	int code=fuse_main(args.argc,args.argv,&sfs_oper,0);
+	int code=fuse_main(argc,argv,&sfs_oper,0);
 	free_resources();
 	return code;
 }

@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include "procedures.h"
 #include "operations.h"
 
@@ -36,7 +37,6 @@ void init_resources() {
 
 void free_resources() {
 	free(persistent.mirror);
-	free(persistent.program_path);
 	free_procedures(persistent.procs);
 }
 
@@ -67,9 +67,11 @@ int test_pattern(PTest test,const char *file) {
 
 int test_program(PTest test,const char *file) {
 	// Create the array of arguments of the program by replacing the exclamation mark with the name of the file
-	if (test->args!=0 && test->filearg!=0) *(test->filearg)=file;
+	if (test->args!=0 && test->filearg!=0) *(test->filearg)=(char*)file;
+	// If the program is a filter that requires standard input, add the name of the file in the arguments of the call to execute_program
+	const char *f=(test->filter)?file:0;
 	// Launch the program
-	int code=execute_program(test->path,test->args,0);
+	int code=execute_program(test->path,(const char**)(test->args),0,f);
 	return (code==0);
 }
 
@@ -90,43 +92,75 @@ int program_shell(PProgram program,const char *file,int fd) {
 	line[j]=0;
 	char *path=line+i;
 	const char *args[]={path,file,0};
-	int code=execute_program(path,args,fd);
+	int code=execute_program(path,args,fd,0);
 	free(line);
 	return code;
 }
 
 int program_self(PProgram program,const char *file,int fd) {
 	const char *args[]={file,0};
-	int code=execute_program(file,args,fd);
+	int code=execute_program(file,args,fd,0);
 	return code;
 }
 
 int program_external(PProgram program,const char *file,int fd) {
 	// Create the array of arguments of the program by replacing the exclamation mark with the name of the file
-	if (program->args!=0 && program->filearg!=0) *(program->filearg)=file;
+	if (program->args!=0 && program->filearg!=0) *(program->filearg)=(char*)file;
+	// If the program is a filter that requires standard input, add the name of the file in the arguments of the call to execute_program
+	const char *f=(program->filter)?file:0;
 	// Launch the program
-	int code=execute_program(program->path,program->args,fd);
+	int code=execute_program(program->path,(const char**)(program->args),fd,f);
 	return code;
 }
 
 /********************************************/
 /*             OTHER OPERATIONS             */
 /********************************************/
-int is_script(const char *file) {
-	return persistent.test(file);
+Procedure* get_script(const Procedures *procs,const char *file) {
+	Procedure *res=0;
+	while (res==0 && procs!=0) {
+		if (procs->procedure->test->func(procs->procedure->test,file)!=0) res=procs->procedure;
+	}
+	return res;
 }
 
-int execute_program(const char *file,const char **args,int fd) {
+int execute_program(const char *file,const char **args,int out,const char* path_in) {
 	pid_t child;	// ID of child process executing external program
-	child=fork();
+	int fds[2];	// Handles of the two ends of the pipe, only used if input has to be provided to the standard input of the external program
+	int in;
+	if (path_in!=0) {	// Prepare a pipe to feed standard input of the external program, fork and copy the file to the pipe
+		pipe(fds);
+		child=fork();
+		close(fds[0]);	// Close input descriptor
+		in=open(path_in,O_RDONLY);
+		if (in<0) path_in=0; else {	// Copy file to standard input
+			char buffer[0x1000];
+			ssize_t num,numw,num2;
+			do {
+				num=read(in,buffer,0x1000);
+				numw=0;
+				while (numw<num) {
+					num2=write(fds[1],buffer+numw,num-numw);
+					if (num2<0) numw=num; else numw+=num2;
+				}
+			} while (num>0);
+		}
+		fsync(fds[1]);
+		close(fds[1]);
+	} else child=fork();	// Only create the pipe
 	if (child!=0) {	// Parent process (caller)
 		int code;
 		waitpid(child,&code,0);
 		if (WIFEXITED(code)) return WEXITSTATUS(code);
 	} else {	// Child process (external program)
-		if (fd!=0) dup2(fd,STDOUT_FILENO);	// Redirect output to fd descriptor
+		if (out!=0) dup2(out,STDOUT_FILENO);	// Redirect output to out descriptor
 		else dup2(STDERR_FILENO,STDOUT_FILENO);	// Redirect standard output on standard error, to avoid mixing outputs from the external program and the parent process
-		close(STDIN_FILENO);	// We do not want the external program to use anything from the common standard input
+		if (path_in==0) {
+			close(STDIN_FILENO);	// We do not want the external program to use anything from the common standard input
+		} else {
+			close(fds[1]);	// Close output descriptor
+			dup2(fds[0],STDIN_FILENO);	// Redirect standard input to pipe output
+		}
 		execvp(file,(char *const *)args);
 		fprintf(stderr,"Error calling external program : %s",file);
 		while (args!=0) fprintf(stderr," %s",*(args++));

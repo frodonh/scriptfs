@@ -22,7 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <rexeg.h>
+#include <regex.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -44,16 +44,16 @@ char *read_word(const char **str) {
 	while (**str!=0 && (**str==' ' || **str=='\t')) (*str)++;
 	if (**str==0) return 0;
 	const char *s=*str;
-	char *word[MAX_PATH_LEN];
+	char word[MAX_PATH_LENGTH];
 	size_t num=0;
 	int state=1;
-	while (*s!=0 && state!=0 && num<MAX_PATH_LEN-1) {
+	while (*s!=0 && state!=0 && num<MAX_PATH_LENGTH-1) {
 		switch (state) {
 			case 1:
 				if (*s=='"') state=2;
-				else if (*s==''') state=3;
+				else if (*s=='\'') state=3;
 				else if (*s=='\\') state=4;
-				else if (*s==' ' || *s=='\n' || *s='\t') state=0;
+				else if (*s==' ' || *s=='\n' || *s=='\t') state=0;
 				else word[num++]=*s;
 				break;
 			case 2:
@@ -62,14 +62,14 @@ char *read_word(const char **str) {
 				else word[num++]=*s;
 				break;
 			case 3:
-				if (*s==''') state=1;
+				if (*s=='\'') state=1;
 				else word[num++]=*s;
 				break;
 			case 4:
-				if (*s==''' || *s=='"' || *s=='\\') word[num++]=*s;
-				else if (*s='t') word[num++]='\t';
-				else if (*s='n') word[num++]='\n';
-				else if (*s='r') word[num++]='\r';
+				if (*s=='\'' || *s=='"' || *s=='\\') word[num++]=*s;
+				else if (*s=='t') word[num++]='\t';
+				else if (*s=='n') word[num++]='\n';
+				else if (*s=='r') word[num++]='\r';
 				state=1;
 				break;
 			case 5:
@@ -105,8 +105,8 @@ void tokenize_command(const char *str,char **path,char ***args,char ***filearg) 
 	if (*path==0) return;
 	size_t num=1;
 	*args=(char**)malloc((MAX_ARGS_NUMBER+1)*sizeof(char*));
-	(*args)[0]=(char*)malloc((strlen(path)+1)*sizeof(char));
-	strcpy((*args)[0],path);
+	(*args)[0]=(char*)malloc((strlen(*path)+1)*sizeof(char));
+	strcpy((*args)[0],*path);
 	while (*str!=0 && num<MAX_ARGS_NUMBER) {
 		(*args)[num]=read_word(&str);
 		if ((*args)[num]!=0 && (*args)[num][0]=='!' && (*args[num][1]==0)) {
@@ -117,7 +117,7 @@ void tokenize_command(const char *str,char **path,char ***args,char ***filearg) 
 		if ((*args)[num]!=0) ++num;
 	}
 	(*args)[num++]=0;
-	realloc(*args,num*sizeof(char*));
+	*args=realloc(*args,num*sizeof(char*));
 }
 
 /********************************************/
@@ -140,6 +140,7 @@ Program *get_program_from_string(const char *str) {
 	prog->path=0;
 	prog->args=0;
 	prog->filearg=0;
+	prog->filter=0;
 	if (*str==0 || strncasecmp(str,"AUTO",4)==0) {	// Read program from the first line of the file
 		prog->func=&program_shell;
 	} else if (strncasecmp(str,"SELF",4)==0) {	// The file is the program itself
@@ -150,8 +151,11 @@ Program *get_program_from_string(const char *str) {
 			struct stat fileinfo;
 			stat(prog->path,&fileinfo);
 			if (!(S_ISREG(fileinfo.st_mode) && access(prog->path,X_OK))) {
-				fprintf(stderr,"%s can not be found or executed\n",prog.path);
-			} else prog->func=&program_external;
+				fprintf(stderr,"%s can not be found or executed\n",prog->path);
+			} else {
+				prog->func=&program_external;
+				prog->filter=1;
+			}
 		}
 	}
 	if (prog->func==0) {	// If no program function was set, clear the structure
@@ -184,6 +188,7 @@ Test *get_test_from_string(const char *str) {
 	test->args=0;
 	test->filearg=0;
 	test->compiled=0;
+	test->filter=0;
 	test->func=0;
 	if (*str==0 || strncasecmp(str,"ALWAYS",6)==0) {	// Consider all files are executable
 		test->func=test_true;
@@ -204,8 +209,11 @@ Test *get_test_from_string(const char *str) {
 			struct stat fileinfo;
 			stat(test->path,&fileinfo);
 			if (!(S_ISREG(fileinfo.st_mode) && access(test->path,X_OK))) {
-				fprintf(stderr,"%s can not be found or executed\n",test.path);
-			} else test->func=&test_program;
+				fprintf(stderr,"%s can not be found or executed\n",test->path);
+			} else {
+				test->func=&test_program;
+				test->filter=1;
+			}
 		}
 	}
 	if (test->func==0) {	// If no test function was set, clear the structure
@@ -232,18 +240,18 @@ Procedure* get_procedure_from_string(const char* str) {
 	// Find the limit between the program and the test
 	while (*p!=0 && *p!=';') ++p;
 	// Read program
-	const char *q=(const char*)malloc((p-str+1)*sizeof(char));
-	strcpy(q,str,p-str);
+	char *q=(char*)malloc((p-str+1)*sizeof(char));
+	strncpy(q,str,p-str);
 	q[p-str]=0;
 	proc->program=get_program_from_string(q);
 	free(q);
 	// Read test
-	if (*p==0) test=0; else if (proc->program!=0) {
+	if (*p==0) proc->test=0; else if (proc->program!=0) {
 		str=p+1;
 		p=str;
 		while (*p!=0) ++p;
-		q=(const char *)malloc((p-str+1)*sizeof(char));
-		strcpy(q,str,p-str);
+		q=(char *)malloc((p-str+1)*sizeof(char));
+		strncpy(q,str,p-str);
 		q[p-str]=0;
 		proc->test=get_test_from_string(q);
 		free(q);

@@ -37,14 +37,14 @@ typedef struct Test *PTest;	//!< Forward definition of pointer to Test type
  *
  * The test function should be called with a path as its parameter and returns 1 if the file at path location is a script, and 0 otherwise.
  */
-typedef int (*TestFunction)(PTest ptest,const char*);
+typedef int (*TestFunction)(PTest,const char*);
 
 /**
  * \brief Type of a script function
  *
  * The script function is called with a parameter giving the path of a script. It executes the script, writes its output on the file with fd descriptor, and returns the error code of the program.
  */
-typedef int (*ProgramFunction)(PProgram pprogram,const char*,int fd);
+typedef int (*ProgramFunction)(PProgram,const char*,int fd);
 
 /********************************************/
 /*                 PROGRAM                  */
@@ -58,7 +58,8 @@ typedef struct Program {
 	char *path;	//!< Full path to the program, null if the program is automatically detected or the script itself (see also \ref syntaxdoc "Syntax of command-line").
 	char **args;	//!< Array of arguments to send to the program. This variable is null if no external program is defined. If an exclamation mark has been found in the array of arguments, it is replaced by a null element. The filearg variable points to the position of this null element. The last element of the array must be a null pointer. The first element of the array is the name of the executable itself (to comply with the standard way to call a program).
 	char **filearg;	//!< If there is an exclamation mark in args, the variable points to the element holding this exclamation mark
-	ProgramFunction *func;	//!< Pointer to the program function
+	int filter;	//!< Tells if the program is actually a filter. In that case, if the filearg variable is null, the program expects to get content on its standard input
+	ProgramFunction func;	//!< Pointer to the program function
 } Program;
 
 /**
@@ -89,8 +90,9 @@ typedef struct Test {
 	char *path;	//!< Full path to the test program, null if the test is not a program (see also \ref syntaxdoc "Syntax of command-line").
 	char **args;	//!< Array of arguments to send to the program. This variable is null if no external program is defined. If an exclamation mark has been found in the array of arguments, it is replaced by a null element. The filearg variable points to the position of this null element. The last element of the array must be a null pointer. The first element of the array is the name of the executable itself (to comply with the standard way to call a program).
 	char **filearg;	//!< If there is an exclamation mark in args, the variable points to the element holding this exclamation mark
+	int filter;	//!< Tells if the test function is actually a filter. In that case, if the filearg variable is null, the function expects to get content on its standard input
 	regex_t *compiled;	//!< If the Test function is actually a match against a regular expression, holds the compiled value of the regular expression, otherwise null
-	TestFunction *func;	//!< Pointer to the test function
+	TestFunction func;	//!< Pointer to the test function
 } Test;
 
 /**
