@@ -119,7 +119,8 @@ int program_external(PProgram program,const char *file,int fd) {
 Procedure* get_script(const Procedures *procs,const char *file) {
 	Procedure *res=0;
 	while (res==0 && procs!=0) {
-		if (procs->procedure->test->func(procs->procedure->test,file)!=0) res=procs->procedure;
+		if (procs->procedure->test->func!=0 && procs->procedure->test->func(procs->procedure->test,file)!=0) res=procs->procedure;
+		procs=procs->next;
 	}
 	return res;
 }

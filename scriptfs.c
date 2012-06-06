@@ -663,7 +663,7 @@ int sfs_flush(const char *path,struct fuse_file_info *fi) {
 	if (fi==0 || fi->fh==0) return -EBADF;
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
 	if (fs->type==T_FOLDER) return -EISDIR;
-	if (fs->type==T_SCRIPT) return -EACCES;
+	if (fs->type==T_SCRIPT) return 0;
 	int code=fsync(fs->handle);
 	return (code==0)?0:-errno;
 }
@@ -750,13 +750,13 @@ int main(int argc,char **argv) {
 	gid=getegid();
 	// Parse command line arguments
 	init_resources();
-	size_t i;
+	size_t i,j;
 	Procedures *last=0;
 	for (i=1;i<argc && argv[i][0]=='-';++i) {
 		if (argv[i][1]=='o') ++i;	// Skip -o options parameters
 		else if (argv[i][1]=='p') { // Parse -p options parameters
-			++i;
-			Procedure *proc=get_procedure_from_string(argv[i]);
+			if (i>=argc-1) print_usage(EINVAL);
+			Procedure *proc=get_procedure_from_string(argv[i+1]);
 			if (proc!=0) {
 				Procedures *procs=(Procedures*)malloc(sizeof(Procedures));
 				procs->procedure=proc;
@@ -764,6 +764,9 @@ int main(int argc,char **argv) {
 				if (last==0) persistent.procs=procs; else last->next=procs;
 				last=procs;
 			}
+			for (j=i;j<argc-2;++j) argv[j]=argv[j+2];
+			argc-=2;
+			--i;
 		}
 	}
 	if ((argc-i)!=2) print_usage(EINVAL);

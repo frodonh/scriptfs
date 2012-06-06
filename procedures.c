@@ -244,9 +244,31 @@ Procedure* get_procedure_from_string(const char* str) {
 	strncpy(q,str,p-str);
 	q[p-str]=0;
 	proc->program=get_program_from_string(q);
-	free(q);
 	// Read test
-	if (*p==0) proc->test=0; else if (proc->program!=0) {
+	if (*p==0) {
+		if (proc->program->func==&program_external) {	// Choose same external program for the test function
+			proc->test=get_test_from_string(q);
+		} else if (proc->program->func==&program_shell) {	// Choose corresponding test function for shell scripts
+			proc->test=(Test*)malloc(sizeof(Test));
+			proc->test->func=&test_shell;
+			proc->test->path=0;
+			proc->test->args=0;
+			proc->test->filearg=0;
+			proc->test->filter=0;
+			proc->test->compiled=0;
+		} else if (proc->program->func==&program_self) {	// Choose test function that checks if the file is executable
+			proc->test=(Test*)malloc(sizeof(Test));
+			proc->test->func=&test_executable;
+			proc->test->path=0;
+			proc->test->args=0;
+			proc->test->filearg=0;
+			proc->test->filter=0;
+			proc->test->compiled=0;
+		} else proc->test=0;
+		free(q);
+	}
+	else if (proc->program!=0) {
+		free(q);
 		str=p+1;
 		p=str;
 		while (*p!=0) ++p;
