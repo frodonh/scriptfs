@@ -158,7 +158,7 @@ typedef struct Procedures {
  *
  * The function release all the memory allocated to a Procedures structure. It goes through the Procedure elements and frees pointers in the elements.
  *
- * \param procedure Pointer to the Procedures structure
+ * \param procedures Pointer to the Procedures structure
  */
 void free_procedures(Procedures *procedures);
 

@@ -141,16 +141,13 @@ Program *get_program_from_string(const char *str) {
 	prog->args=0;
 	prog->filearg=0;
 	prog->filter=0;
-	if (*str==0 || strncasecmp(str,"AUTO",4)==0) {	// Read program from the first line of the file
+	if (*str==0 || strncasecmp(str,"AUTO",4)==0) {	// Program is either a shell script or an executable that can be executed by itself
 		prog->func=&program_shell;
-	} else if (strncasecmp(str,"SELF",4)==0) {	// The file is the program itself
-		prog->func=&program_self;
 	} else {	// The program is located by a path name
 		tokenize_command(str,&(prog->path),&(prog->args),&(prog->filearg));
 		if (prog->path!=0) {
 			struct stat fileinfo;
-			stat(prog->path,&fileinfo);
-			if (!(S_ISREG(fileinfo.st_mode) && access(prog->path,X_OK))) {
+			if (!(stat(prog->path,&fileinfo)==0 && S_ISREG(fileinfo.st_mode) && access(prog->path,X_OK)==0)) {
 				fprintf(stderr,"%s can not be found or executed\n",prog->path);
 			} else {
 				prog->func=&program_external;
@@ -207,8 +204,7 @@ Test *get_test_from_string(const char *str) {
 		tokenize_command(str,&(test->path),&(test->args),&(test->filearg));
 		if (test->path!=0) {
 			struct stat fileinfo;
-			stat(test->path,&fileinfo);
-			if (!(S_ISREG(fileinfo.st_mode) && access(test->path,X_OK))) {
+			if (!(stat(test->path,&fileinfo)==0 && S_ISREG(fileinfo.st_mode) && access(test->path,X_OK)==0)) {
 				fprintf(stderr,"%s can not be found or executed\n",test->path);
 			} else {
 				test->func=&test_program;
@@ -245,41 +241,33 @@ Procedure* get_procedure_from_string(const char* str) {
 	q[p-str]=0;
 	proc->program=get_program_from_string(q);
 	// Read test
-	if (*p==0) {
-		if (proc->program->func==&program_external) {	// Choose same external program for the test function
+	if (proc->program!=0) {
+		if (*p==0) {
+			if (proc->program->func==&program_external) {	// Choose same external program for the test function
+				proc->test=get_test_from_string(q);
+			} else if (proc->program->func==&program_shell) {	// Choose corresponding test function for shell scripts
+				proc->test=(Test*)malloc(sizeof(Test));
+				proc->test->func=&test_shell_executable;
+				proc->test->path=0;
+				proc->test->args=0;
+				proc->test->filearg=0;
+				proc->test->filter=0;
+				proc->test->compiled=0;
+			} else proc->test=0;
+			free(q);
+		}
+		else {
+			free(q);
+			str=p+1;
+			p=str;
+			while (*p!=0) ++p;
+			q=(char *)malloc((p-str+1)*sizeof(char));
+			strncpy(q,str,p-str);
+			q[p-str]=0;
 			proc->test=get_test_from_string(q);
-		} else if (proc->program->func==&program_shell) {	// Choose corresponding test function for shell scripts
-			proc->test=(Test*)malloc(sizeof(Test));
-			proc->test->func=&test_shell;
-			proc->test->path=0;
-			proc->test->args=0;
-			proc->test->filearg=0;
-			proc->test->filter=0;
-			proc->test->compiled=0;
-		} else if (proc->program->func==&program_self) {	// Choose test function that checks if the file is executable
-			proc->test=(Test*)malloc(sizeof(Test));
-			proc->test->func=&test_executable;
-			proc->test->path=0;
-			proc->test->args=0;
-			proc->test->filearg=0;
-			proc->test->filter=0;
-			proc->test->compiled=0;
-		} else proc->test=0;
-		free(q);
-	}
-	else if (proc->program!=0) {
-		free(q);
-		str=p+1;
-		p=str;
-		while (*p!=0) ++p;
-		q=(char *)malloc((p-str+1)*sizeof(char));
-		strncpy(q,str,p-str);
-		q[p-str]=0;
-		proc->test=get_test_from_string(q);
-		free(q);
-	}
-	// If nothing was declared, release the Procedure structure
-	if (proc->program==0) {
+			free(q);
+		}
+	} else { // If nothing was declared, release the Procedure structure
 		free(proc);
 		proc=0;
 	}

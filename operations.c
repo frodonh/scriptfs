@@ -60,6 +60,10 @@ int test_executable(PTest test,const char *file) {
 	return access(file,X_OK)==0;
 }
 
+int test_shell_executable(PTest test,const char *file) {
+	return test_shell(test,file) || test_executable(test,file);
+}
+
 int test_pattern(PTest test,const char *file) {
 	if (test->compiled==0) return 0;
 	return regexec(test->compiled,file,0,0,0)==0;
@@ -79,25 +83,6 @@ int test_program(PTest test,const char *file) {
 /*           EXECUTION FUNCTIONS            */
 /********************************************/
 int program_shell(PProgram program,const char *file,int fd) {
-	FILE *f=fopen(file,"r");
-	if (f==0) return 1;
-	char *line=0;
-	size_t nn;
-	ssize_t n=getline(&line,&nn,f);
-	size_t i=2;
-	while (i<n && (line[i]==' ' || line[i]=='\t')) ++i;
-	if (i>=n || line[i]=='\n') return 1;
-	size_t j=i;
-	while (j<n && (line[j-1]=='\\' || (line[j]!=' ' && line[j]!='\t' && line[j]!='\n'))) ++j;
-	line[j]=0;
-	char *path=line+i;
-	const char *args[]={path,file,0};
-	int code=execute_program(path,args,fd,0);
-	free(line);
-	return code;
-}
-
-int program_self(PProgram program,const char *file,int fd) {
 	const char *args[]={file,0};
 	int code=execute_program(file,args,fd,0);
 	return code;
@@ -119,19 +104,53 @@ int program_external(PProgram program,const char *file,int fd) {
 Procedure* get_script(const Procedures *procs,const char *file) {
 	Procedure *res=0;
 	while (res==0 && procs!=0) {
-		if (procs->procedure->test->func!=0 && procs->procedure->test->func(procs->procedure->test,file)!=0) res=procs->procedure;
+		if (procs->procedure->test!=0 && procs->procedure->test->func!=0 && procs->procedure->test->func(procs->procedure->test,file)!=0) res=procs->procedure;
 		procs=procs->next;
 	}
 	return res;
+}
+
+void call_program(const char *file,const char **args) {
+	// Check the nature of file
+	FILE *f=fopen(file,"r");
+	if (f==0) return;
+	char *line=0;
+	size_t nn;
+	ssize_t n=getline(&line,&nn,f);
+	fclose(f);
+	if (n>=2 && line[0]=='#' && line[1]=='!') {	// file is a shell script
+		// Read the path to the script interpretor
+		size_t i=2;
+		while (i<n && (line[i]==' ' || line[i]=='\t')) ++i;
+		if (i>=n || line[i]=='\n') return;
+		size_t j=i;
+		while (j<n && (line[j-1]=='\\' || (line[j]!=' ' && line[j]!='\t' && line[j]!='\n'))) ++j;
+		char path[j-i+1];
+		strncpy(path,line+i,j-i);
+		path[j-i]=0;
+		free(line);
+		// Prepare array of arguments
+		i=0;
+		const char **ar=args;
+		while (*(ar++)!=0) ++i;
+		const char *newargs[i+2];
+		newargs[0]=path;
+		j=1;
+		while (j<i+2) {newargs[j]=args[j-1];++j;}
+		// Launch program
+		execvp(path,(char* const*)newargs);
+	} else {
+		execvp(file,(char *const*)args);
+	}
 }
 
 int execute_program(const char *file,const char **args,int out,const char* path_in) {
 	pid_t child;	// ID of child process executing external program
 	int fds[2];	// Handles of the two ends of the pipe, only used if input has to be provided to the standard input of the external program
 	int in;
-	if (path_in!=0) {	// Prepare a pipe to feed standard input of the external program, fork and copy the file to the pipe
-		pipe(fds);
-		child=fork();
+	if (path_in!=0) pipe(fds);	// Prepare a pipe to feed standard input of the external program, fork and copy the file to the pipe
+	child=fork();
+	if (child!=0) {	// Parent process (caller)
 		close(fds[0]);	// Close input descriptor
 		in=open(path_in,O_RDONLY);
 		if (in<0) path_in=0; else {	// Copy file to standard input
@@ -148,8 +167,6 @@ int execute_program(const char *file,const char **args,int out,const char* path_
 		}
 		fsync(fds[1]);
 		close(fds[1]);
-	} else child=fork();	// Only create the pipe
-	if (child!=0) {	// Parent process (caller)
 		int code;
 		waitpid(child,&code,0);
 		if (WIFEXITED(code)) return WEXITSTATUS(code);
@@ -162,7 +179,8 @@ int execute_program(const char *file,const char **args,int out,const char* path_
 			close(fds[1]);	// Close output descriptor
 			dup2(fds[0],STDIN_FILENO);	// Redirect standard input to pipe output
 		}
-		execvp(file,(char *const *)args);
+		//execvp(file,(char *const *)args);
+		call_program(file,args);
 		fprintf(stderr,"Error calling external program : %s",file);
 		while (args!=0) fprintf(stderr," %s",*(args++));
 		fprintf(stderr,"\n");

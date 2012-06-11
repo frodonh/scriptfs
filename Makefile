@@ -33,7 +33,6 @@ $(BIN)/%.o:%.c %.h
 
 clean:
 	@rm *.o
-	@rm sandbox
 
 doc:
 	@doxygen doxyconf

@@ -112,6 +112,16 @@ int test_false(PTest test,const char *file);
 int test_executable(PTest test,const char *file);
 
 /**
+ * \brief Test is the file would be executable in a shell
+ *
+ * This function checks if the file would be executable in a shell, that is either it is a shell script or it is an executable file. Thus the result of this function is the binary-or of test_shell and test_executable.
+ * \param test Pointer to the Test structure from which the function is called.
+ * \param file Path of the file that has to be tested
+ * \return 1 if the file is executable in a shell, 0 otherwise
+ */
+int test_shell_executable(PTest test,const char *file);
+
+/**
  * \brief Test a file by matching its full name against a regular expression
  *
  * This function is one possible implementation of a TestFunction function. It matches the name of the file in argument with the regular expression hold by the test variable. A regular expression is a standard POSIX basic regular expression. It accepts characters like ., *, ?, +,... See also the man page of grep for more details about basic regular expressions.
@@ -146,17 +156,6 @@ int test_program(PTest test,const char *file);
 int program_shell(PProgram program,const char *file,int fd);
 
 /**
- * \brief Execute a script as it was an executable by itself
- *
- * This function of the ProgramFunction type executes considers a script file to be an executable program by itself and runs it in a new process. The standard output is redirect to the file which descriptor is given.
- * \param program Pointer to the Program structure from which the function is called. The structure holds data used to locate the executable and get its arguments.
- * \param file Path of the script file
- * \param fd Descriptor of the file on which the output of the program will be written. The file should already be opened and ready to accept input
- * \return Error code of the external program after its execution
- */
-int program_self(PProgram program,const char *file,int fd);
-
-/**
  * \brief Execute an external program and write its output on given file
  *
  * This function is a simple wrapper of the execute_program function and publishes it as a ProgramFunction type. It executes the external program on the specified file and redirects its output on the file which descriptor is given.
@@ -179,6 +178,15 @@ int program_external(PProgram program,const char *file,int fd);
  * \return Pointer to a procedure which test function succeeds when applied to the file, null if no procedure is found
  */
 Procedure* get_script(const Procedures *procs,const char *file);
+
+/**
+ * \brief Detect if a file is a shell script or a classic executable and executes it
+ *
+ * The function checks if the file in the first argument is a shell script or a classic executable file. It then executes it according to its nature. The executed program replaces the current process and nothing is done with input and output file descriptors which should be redirected before the call to the function if needed. Since the current process is replaced by a new one, the function should never return. The mere fact that it returns tells that an error occured.
+ * \param file Path to the program to be executed
+ * \param args Array of arguments to be added after the name of the program. Whether the program is a shell script or a real executable, the array of arguments will not be changed and will be sent as such to the execvp call.
+ */
+void call_program(const char *file,const char **args);
 
 /**
  * \brief Spawn a process that executes an external program

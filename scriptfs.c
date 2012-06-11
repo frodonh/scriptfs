@@ -783,6 +783,7 @@ int main(int argc,char **argv) {
 		persistent.procs->procedure->program->filearg=0;
 		persistent.procs->procedure->program->func=&program_shell;
 		persistent.procs->procedure->test=0;
+		persistent.procs->next=0;
 	}
 	// Daemonize the program
 	int code=fuse_main(argc,argv,&sfs_oper,0);
