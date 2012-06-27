@@ -1,0 +1,574 @@
+#summary Documentation for the scriptfs.c file
+
+= scriptfs.c =
+
+
+
+== Functions ==
+
+void print_usage(int code)
+  *Display a brief help about the syntax and exit the program.*
+void tokenize(char * s, char *** tokens)
+  *Split a string in different tokens.*
+void * sfs_init(struct fuse_conn_info * conn)
+  *Initialize the filesystem.*
+void sfs_destroy(void * private_data)
+  *Unmount the filesystem.*
+int sfs_getattr(const char * path, struct stat * stbuf)
+  *Get the attributes of a file on the virtual filesystem.*
+int sfs_fgetattr(const char * path, struct stat * stbuf, struct fuse_file_info * fi)
+  *Get the attributes of a file on the virtual filesystem.*
+int sfs_access(const char * path, int mask)
+  *Check if a file can be accessed to with the given rights.*
+int sfs_readlink(const char * path, char * buf, size_t size)
+  *Return the target of a symbolic link.*
+int sfs_opendir(const char * path, struct fuse_file_info * fi)
+  *Open a directory for reading.*
+int sfs_readdir(const char * path, void * buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info * fi)
+  *Read the content of a directory.*
+int sfs_releasedir(const char * path, struct fuse_file_info * fi)
+  *Release a directory structure.*
+int sfs_mkdir(const char * path, mode_t mode)
+  *Make a new directory.*
+int sfs_rmdir(const char * path)
+  *Remove a directory.*
+int sfs_symlink(const char * to, const char * from)
+  *Make a symbolic link in the virtual file system.*
+int sfs_unlink(const char * path)
+  *Remove a file from the virtual file system.*
+int sfs_link(const char * from, const char * to)
+  *Create a new hard link on the virtual file system.*
+int sfs_rename(const char * from, const char * to)
+  *Rename a file or a directory in the virtual file system.*
+int sfs_chmod(const char * path, mode_t mode)
+  *Change permissions of a file in the virtual file system.*
+int sfs_truncate(const char * path, off_t size)
+  *Truncate a file in a virtual file system so that it has the desired size.*
+int sfs_ftruncate(const char * path, off_t size, struct fuse_file_info * fi)
+  *Truncate a file in a virtual file system so that it has the desired size.*
+int sfs_utimens(const char * path, const struct timespec ts)
+  *Update the last access and last modification times of a file on the virtual file system.*
+int sfs_statfs(const char * path, struct statvfs * stbuf)
+  *Retrieve statistics about the file system.*
+int sfs_open(const char * path, struct fuse_file_info * fi)
+  *Open a file in the virtual file system.*
+int sfs_read(const char * path, char * buf, size_t size, off_t offset, struct fuse_file_info * fi)
+  *Read content from a file on the virtual file system.*
+int sfs_write(const char * path, const char * buf, size_t size, off_t offset, struct fuse_file_info * fi)
+  *Write content in a file of the virtual file system.*
+int sfs_release(const char * path, struct fuse_file_info * fi)
+  *Close a file on the virtual file system.*
+int sfs_fsync(const char * path, int isdatasync, struct fuse_file_info * fi)
+  *Flush any information about the file to the disk.*
+int sfs_flush(const char * path, struct fuse_file_info * fi)
+  *Flush modifications to a file in the virtual file system.*
+int sfs_create(const char * path, mode_t mode, struct fuse_file_info * fi)
+  *Create a new file on the virtual file system.*
+int main(int argc, char ** argv)
+  *Main program, mounts file system.*
+
+== Detailed Description ==
+
+
+=====================================================================================
+
+Filename: scriptfs.c
+
+Description: FUSE-based file system that automatically executes scripts and returns their output instead of the actual file content
+
+Version: 1.0 Created: 08/05/2012 13:26:37 Revision: none Compiler: gcc
+
+Author: François Hissel Company:
+
+=====================================================================================
+
+== Function Documentation ==
+
+{{{
+#void print_usage   (
+  int code  )
+}}}
+  Display a brief help about the syntax and exit the program.
+  The function is called when the user supplies wrong command line parameters. It displays a brief help and exits the program.
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#void tokenize   (
+  char * s,
+  char *** tokens  )
+}}}
+  Split a string in different tokens.
+  This function analyses the string s and splits it in tokens delimited by blank characters (spaces or tabs or newlines). When two or more delimiters appear in successive positions, they are considered as only one delimiter. Blank characters at the start or at the end of the string are ignored. At the end of the function, the tokens variable points to an array of string, with each value being one token of the initial string. The last element points to a null pointer. Due to its internal algorithm, only the 254 first tokens of the string can be returned.
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#void * sfs_init   (
+  struct fuse_conn_info * conn  )
+}}}
+  Initialize the filesystem.
+  This function does all the technical stuff which has to be done before the start of the program. In particular, it allocates storage for the structures in memory and defines some of the callback functions used when a script is executed. The fuse_conn_info structure tells which capabilities FUSE provides and which one are needed and activated by the client. The function returns a pointer which will be available in all file operations later. 
+
+Pointer to a persistent structure, available in future file operations
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#void sfs_destroy   (
+  void * private_data  )
+}}}
+  Unmount the filesystem.
+  This function is called when the filesystem is unmounted. It releases all allocated memory.
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_getattr   (
+  const char * path,
+  struct stat * stbuf  )
+}}}
+  Get the attributes of a file on the virtual filesystem.
+  This function loads the attributes of a chosen file and stores it in the stbuf variable. It is used if no file handle is provided through a fuse_file_info structure. 
+
+Error code, 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_fgetattr   (
+  const char * path,
+  struct stat * stbuf,
+  struct fuse_file_info * fi  )
+}}}
+  Get the attributes of a file on the virtual filesystem.
+  This function loads the attributes of a chosen file and stores it in the stbuf variable. It is used if a file handle is provided through a fuse_file_info structure. 
+
+Error code, 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_access   (
+  const char * path,
+  int mask  )
+}}}
+  Check if a file can be accessed to with the given rights.
+  This function checks if the file at the path address (virtual path) can be accessed to. It returns 0 if the file exists and the user is authorized to access to it, and another value otherwise. 
+
+0 if the file can be opened, another value otherwise
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_readlink   (
+  const char * path,
+  char * buf,
+  size_t size  )
+}}}
+  Return the target of a symbolic link.
+  This function reads the symbolic link which path is given as parameter and stores the target path in the buf string. The size of the buffer must be saved in the size variable (including the null character at the end of the string, and contrary to the system's readlink function). If the link target is too long, the function should truncate it. The function returns 0 if everything went fine and an error code otherwise. As the file system is programmed, the mounted folder can hold symbolic links to any other file, being or not on the filesystem. Using relative links in symbolic links targets can ensure the symbolic link is still on the virtual file system and the target is read using the ScriptFS operations. 
+
+0 if everything went fine, another value otherwise
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_opendir   (
+  const char * path,
+  struct fuse_file_info * fi  )
+}}}
+  Open a directory for reading.
+  The function opens the directory to read its content. It actually looks if the opening is permitted, and stores a handle of the directory in the fi struct. 
+
+0 if everything went fine, another value otherwise
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_readdir   (
+  const char * path,
+  void * buf,
+  fuse_fill_dir_t filler,
+  off_t offset,
+  struct fuse_file_info * fi  )
+}}}
+  Read the content of a directory.
+  This function returns all directory entries to the caller. It is one of the main functions of the filesystem. 
+
+0 if there are no more files or if the filler function returned a non-null value, another value otherwise
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_releasedir   (
+  const char * path,
+  struct fuse_file_info * fi  )
+}}}
+  Release a directory structure.
+  This function is called when the user does not need to read a directory any longer. It is the equivalent of the release function for directories. The function releases the directory handle and frees all memory allocated to store the directoy element. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_mkdir   (
+  const char * path,
+  mode_t mode  )
+}}}
+  Make a new directory.
+  This function creates a new empty directory in the virtual file system. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_rmdir   (
+  const char * path  )
+}}}
+  Remove a directory.
+  This function remove a directory in the virtual file system. This is basically the same as removing the directory in the mirror file system. 
+
+Error code, 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_symlink   (
+  const char * to,
+  const char * from  )
+}}}
+  Make a symbolic link in the virtual file system.
+  This function creates a new symbolic link which targets to another file. 
+
+Error code, 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_unlink   (
+  const char * path  )
+}}}
+  Remove a file from the virtual file system.
+  This function unlinks (removes) a file from the virtual file system. This is the same as removing the file from the mirror file system. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_link   (
+  const char * from,
+  const char * to  )
+}}}
+  Create a new hard link on the virtual file system.
+  This function creates a hard link on the virtual file system. This is the same as creating the hard link on the mirror file system. Hard links are interesting because they can "extend" the file system by referring to files out of it. Those target files, if they are scripts, can be executed by the file system. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_rename   (
+  const char * from,
+  const char * to  )
+}}}
+  Rename a file or a directory in the virtual file system.
+  This function changes the name of a file or a directory in the virtual file system. This is the same as changing the name in the mirror file system. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_chmod   (
+  const char * path,
+  mode_t mode  )
+}}}
+  Change permissions of a file in the virtual file system.
+  This function changes the permissions (read, write, execute) of a file in the virtual file system. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_truncate   (
+  const char * path,
+  off_t size  )
+}}}
+  Truncate a file in a virtual file system so that it has the desired size.
+  This function truncates a file in the virtual file system to the desired size given as a parameter. It also checks if the file is not a script to determine if it can be truncated, because for the moment writing on scripts is disabled. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_ftruncate   (
+  const char * path,
+  off_t size,
+  struct fuse_file_info * fi  )
+}}}
+  Truncate a file in a virtual file system so that it has the desired size.
+  This function truncates a file in the virtual file system to the desired size given as a parameter. It is the same as the above one except that it makes use of the file handle from the fi structure instead of the path name. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_utimens   (
+  const char * path,
+  const struct timespec ts  )
+}}}
+  Update the last access and last modification times of a file on the virtual file system.
+  This function updates the last access time from the first element of the array in parameter, and the last modification time from the second element of the same array. It only transfers the order to the mirror file system. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_statfs   (
+  const char * path,
+  struct statvfs * stbuf  )
+}}}
+  Retrieve statistics about the file system.
+  This function retrieves statistics about the whole virtual file system. Since it is hosted on a mirror file system, the statistics should be the same as the latter. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_open   (
+  const char * path,
+  struct fuse_file_info * fi  )
+}}}
+  Open a file in the virtual file system.
+  This function opens a file in the virtual file system. If the file is not a script file, this is the same as opening it on the mirror file system and saving its handle in the file info structure fi. If the file is a script file, the function executes the script, saves its content on a temporary file, and opens the latter for reading. The temporary file is unlinked immediatly so that the user does not have to worry about erasing it when it is closed. The function also checks if the open mode (in the fi->flags variable) are allowed for this file. 
+
+Error code, or 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_read   (
+  const char * path,
+  char * buf,
+  size_t size,
+  off_t offset,
+  struct fuse_file_info * fi  )
+}}}
+  Read content from a file on the virtual file system.
+  This function reads the chosen number of bytes from the file which handle is stored in the fi structure. The file must already be opened (otherwise there is no handle in fi). The reading starts at the position offset in the file. The function returns the actual number of bytes read or 0 if the offset was at or beyond the end of the file. 
+
+Actual number of bytes read, or a negative error code if something wrong occurred
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_write   (
+  const char * path,
+  const char * buf,
+  size_t size,
+  off_t offset,
+  struct fuse_file_info * fi  )
+}}}
+  Write content in a file of the virtual file system.
+  This function writes a chosen number of bytes from the buffer in parameter to the file which handle is stores in the fi structure. The file must already be opened (otherwise there is no handle in fi). The output starts at the position offset into the file. The function returns the actual number of bytes written or a negative error code. 
+
+Actual number of bytes written, or a negative error code if something wrong occurred
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_release   (
+  const char * path,
+  struct fuse_file_info * fi  )
+}}}
+  Close a file on the virtual file system.
+  The function closes an opened file on the virtual file system. It erases the temporary files generated in case the virtual file was a script, releases all the structures allocated (and especially the one holding the handle) and synchronizes the content of the file with that of the mirror file. 
+
+Error code, or 0 if everything went fine, but not used by FUSE
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_fsync   (
+  const char * path,
+  int isdatasync,
+  struct fuse_file_info * fi  )
+}}}
+  Flush any information about the file to the disk.
+  This function makes sure any information written on the file (on the virtual file system) is stored on the disk. It only calls the fsync method from the mirror file system. 
+
+Error code, or 0 if everything went fine, but not used by FUSE
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_flush   (
+  const char * path,
+  struct fuse_file_info * fi  )
+}}}
+  Flush modifications to a file in the virtual file system.
+  The function is called before each close of a function on the virtual file system. It gives a chance to report delayed errors according to the documentation. This one also says that there can be zero, one, or several flush call for each open. 
+
+Error code, or 0 if everything went fine, but not used by FUSE
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int sfs_create   (
+  const char * path,
+  mode_t mode,
+  struct fuse_file_info * fi  )
+}}}
+  Create a new file on the virtual file system.
+  This function creates a file and opens it. It only transfers the order to the mirror system that creates the file. 
+
+Error code, or 0 if everything went fine, but not used by FUSE
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#int main   (
+  int argc,
+  char ** argv  )
+}}}
+  Main program, mounts file system.
+  The main program processes command line arguments and mounts the file system. In addition to standard _fusermount_ command parameters, possible command line arguments are:
+ * -p procedure --procedure=procedure Define an execution procedure. This procedure holds the external executable program and the test program that will be used on files. The command can be repeated as many times as needed, and each procedure will be tested in the order they appear in the command-line. For more information about the way to define a procedure, see [sfs_syntaxdoc Syntax of command-line]. Syntax: scriptfs [-p procedure|--procedure=procedure...] mirror_path mountpoint
+
+
+
+Error code, 0 if everything went fine
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+---
+|| [sfs Main Page] || [sfs_files Files] ||

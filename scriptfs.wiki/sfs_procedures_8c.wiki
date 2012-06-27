@@ -1,0 +1,164 @@
+#summary Documentation for the procedures.c file
+
+= procedures.c =
+
+
+
+== Functions ==
+
+char * read_word(const char ** str)
+  *Read a single word in a command-line.*
+void tokenize_command(const char * str, char ** path, char *** args, char *** filearg)
+  *Analyze a command and extract the name of the executable and the arguments.*
+void free_program( * program)
+  *Release the memory allocated to a Program structure.*
+ * get_program_from_string(const char * str)
+  *Construct a Program structure from a string.*
+void free_test( * test)
+  *Release the memory allocated to a Test structure.*
+ * get_test_from_string(const char * str)
+  *Construct a Test structure from a string.*
+void free_procedure( * procedure)
+  *Release the memory allocated to a Procedure structure.*
+ * get_procedure_from_string(const char * str)
+  *Reads a procedure from a string.*
+void free_procedures( * procedures)
+  *Release the memory allocated to a Procedures structure.*
+
+== Detailed Description ==
+
+
+
+
+== Function Documentation ==
+
+{{{
+#char * read_word   (
+  const char ** str  )
+}}}
+  Read a single word in a command-line.
+  This function reads a word in a string. The word is either a group of successive non-blank characters or escaped blanks, or a string delimitated by quotes. 
+
+Word that has been read. Memory is allocated to hold this word, so the user has to release when it is not needed.
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#void tokenize_command   (
+  const char * str,
+  char ** path,
+  char *** args,
+  char *** filearg  )
+}}}
+  Analyze a command and extract the name of the executable and the arguments.
+  This function analyzes the command in string str as it was a command-line in a shell. The first word is the name of the executable and is sved in the path variable. All other words or group of letters delimitated by quotes are saved in the args array, the first element of this array is again the name of the executable. A null pointer is added at the end of the array. Finally if an exclamation mark is found in one argument, this word is not saved in the args element and the element at the corresponding position is set to a null pointer, while the position is saved in the filearg variable.
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#void free_program   (
+   * program  )
+}}}
+  Release the memory allocated to a Program structure.
+  
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+# * get_program_from_string   (
+  const char * str  )
+}}}
+  Construct a Program structure from a string.
+  This function creates a Program structure from a string given as argument. The format of the string is described in [sfs_syntaxdoc Syntax of command-line]. The user is responsible for releasing the memory of the newly-allocated structure. 
+
+Pointer to a newly-allocated Pointer structure, 0 if something went wrong
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#void free_test   (
+   * test  )
+}}}
+  Release the memory allocated to a Test structure.
+  
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+# * get_test_from_string   (
+  const char * str  )
+}}}
+  Construct a Test structure from a string.
+  This function creates a Test structure from a string given as argument. The format of the string is described in [sfs_syntaxdoc Syntax of command-line]. The user is responsible for releasing the memory of the newly-allocated structure. 
+
+Pointer to a newly-allocated Test structure, 0 if something went wrong
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#void free_procedure   (
+   * procedure  )
+}}}
+  Release the memory allocated to a Procedure structure.
+  
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+# * get_procedure_from_string   (
+  const char * str  )
+}}}
+  Reads a procedure from a string.
+  This function is used to process the command-line `-p` arguments. One such argument is converted to a Procedure structure. The newly-allocated structure must be released by the user when it is not needed any longer. 
+
+Pointer to a newly-created Procedure structure
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+{{{
+#void free_procedures   (
+   * procedures  )
+}}}
+  Release the memory allocated to a Procedures structure.
+  The function release all the memory allocated to a Procedures structure. It goes through the Procedure elements and frees pointers in the elements.
+
+*Parameters*:
+  a   And two parameters. 
+  b   Here's the second. 
+*Returns*:
+  And a return value!
+
+---
+|| [sfs Main Page] || [sfs_files Files] ||
