@@ -109,10 +109,11 @@ void tokenize_command(const char *str,char **path,char ***args,char ***filearg) 
 	strcpy((*args)[0],*path);
 	while (*str!=0 && num<MAX_ARGS_NUMBER) {
 		(*args)[num]=read_word(&str);
-		if ((*args)[num]!=0 && (*args)[num][0]=='!' && (*args[num][1]==0)) {
+		if ((*args)[num]!=0 && (*args)[num][0]=='!' && (*args)[num][1]==0) {
 			free((*args)[num]);
 			(*args)[num]=0;
 			*filearg=*args+num;
+			++num;
 		}
 		if ((*args)[num]!=0) ++num;
 	}
@@ -191,7 +192,7 @@ Test *get_test_from_string(const char *str) {
 		test->func=test_true;
 	} else if (strncasecmp(str,"EXECUTABLE",10)==0) {	// Only files marked as executable in the mirror file system are considered as executable
 		test->func=test_executable;
-	} else if (*str=='^') {	// A regexp is used to select the names of the files
+	} else if (*str=='&') {	// A regexp is used to select the names of the files
 		regex_t *reg=(regex_t*)malloc(sizeof(regex_t));
 		if (regcomp(reg,str+1,REG_NOSUB)!=0) {	// If the regular expression is invalid, no file is recognized as a script
 			test->func=test_false;

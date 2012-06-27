@@ -544,13 +544,13 @@ int sfs_open(const char *path,struct fuse_file_info *fi) {
 		if ((fi->flags & O_WRONLY)!=0 || (fi->flags & O_RDWR)!=0) return -EACCES; 	// If the caller requests to open the file in one of the write modes, immediatly abort the opening
 		char temp_filename[]="/tmp/sfs.XXXXXX";
 		handle=mkstemp(temp_filename);
-		if (handle==0) return -errno;
+		if (handle<=0) return -errno;
 		unlink(temp_filename);
 		proc->program->func(proc->program,fullpath,handle);
 		typ=1;
 	} else {
-		handle=open(fullpath,O_RDWR);
-		if (handle==0) return -errno;
+		handle=open(fullpath,fi->flags);
+		if (handle<=0) return -errno;
 		typ=2;
 	}
 	FileStruct *fs=(FileStruct*)malloc(sizeof(FileStruct));
@@ -687,7 +687,7 @@ int sfs_create(const char *path,mode_t mode,struct fuse_file_info *fi) {
 	strcpy(fullpath+persistent.mirror_len,path);
 	int handle=0;
 	handle=creat(fullpath,mode);
-	if (handle==0) return -errno;
+	if (handle<=0) return -errno;
 	FileStruct *fs=(FileStruct*)malloc(sizeof(FileStruct));
 	fs->type=T_FILE;
 	fs->handle=handle;

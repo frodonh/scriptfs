@@ -92,9 +92,10 @@ int program_external(PProgram program,const char *file,int fd) {
 	// Create the array of arguments of the program by replacing the exclamation mark with the name of the file
 	if (program->args!=0 && program->filearg!=0) *(program->filearg)=(char*)file;
 	// If the program is a filter that requires standard input, add the name of the file in the arguments of the call to execute_program
-	const char *f=(program->filter)?file:0;
+	const char *f=(program->filter && program->filearg==0)?file:0;
 	// Launch the program
 	int code=execute_program(program->path,(const char**)(program->args),fd,f);
+	if (program->args!=0 && program->filearg!=0) *(program->filearg)=0;
 	return code;
 }
 
@@ -151,22 +152,24 @@ int execute_program(const char *file,const char **args,int out,const char* path_
 	if (path_in!=0) pipe(fds);	// Prepare a pipe to feed standard input of the external program, fork and copy the file to the pipe
 	child=fork();
 	if (child!=0) {	// Parent process (caller)
-		close(fds[0]);	// Close input descriptor
-		in=open(path_in,O_RDONLY);
-		if (in<0) path_in=0; else {	// Copy file to standard input
-			char buffer[0x1000];
-			ssize_t num,numw,num2;
-			do {
-				num=read(in,buffer,0x1000);
-				numw=0;
-				while (numw<num) {
-					num2=write(fds[1],buffer+numw,num-numw);
-					if (num2<0) numw=num; else numw+=num2;
-				}
-			} while (num>0);
+		if (path_in!=0) {	// If a path is provided, feed the content of the file to the pipe so that it is used as the standard input of the child process
+			close(fds[0]);	// Close input descriptor
+			in=open(path_in,O_RDONLY);
+			if (in<0) path_in=0; else {	// Copy file to standard input
+				char buffer[0x1000];
+				ssize_t num,numw,num2;
+				do {
+					num=read(in,buffer,0x1000);
+					numw=0;
+					while (numw<num) {
+						num2=write(fds[1],buffer+numw,num-numw);
+						if (num2<0) numw=num; else numw+=num2;
+					}
+				} while (num>0);
+			}
+			fsync(fds[1]);
+			close(fds[1]);
 		}
-		fsync(fds[1]);
-		close(fds[1]);
 		int code;
 		waitpid(child,&code,0);
 		if (WIFEXITED(code)) return WEXITSTATUS(code);
@@ -182,6 +185,7 @@ int execute_program(const char *file,const char **args,int out,const char* path_
 		//execvp(file,(char *const *)args);
 		call_program(file,args);
 		fprintf(stderr,"Error calling external program : %s",file);
+		args++;
 		while (args!=0) fprintf(stderr," %s",*(args++));
 		fprintf(stderr,"\n");
 		abort();
