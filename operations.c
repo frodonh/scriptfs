@@ -23,6 +23,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 #include "procedures.h"
 #include "operations.h"
 
@@ -41,23 +42,49 @@ void free_resources() {
 }
 
 /********************************************/
+/*             COMMON FUNCTIONS             */
+/********************************************/
+/**
+ * \brief Make a temporary copy of a file
+ *
+ * The function tries to copy the file in argument in a temporary folder, on a random name. The file name is relative to the folder which descriptor is in the global variable persistent.mirror_fd. If it succeeds, it returns a newly-allocated string with the name of the temporary file. Otherwise, it returns 0.
+ * \param file Source file which should be copied
+ * \return New string with the name of the temporary file. The user is responsible for releasing the memory allocated for this string.
+ */
+char *temp_copy(const char *file) {
+	char *res=0;
+	int fin=openat(persistent.mirror_fd,file,O_RDONLY);
+	if (fin==-1) return 0;
+	res=tempnam("/tmp","sfs.");
+	int fout=open(res,O_CREAT | O_WRONLY | O_TRUNC | O_EXCL,S_IRUSR | S_IXUSR);
+	if (fout==-1) {close(fin);return 0;}
+	ssize_t num;
+	char buf[0x1000];
+	while ((num=read(fin,&buf,0x1000*sizeof(char)))>0) write(fout,&buf,num);
+	close(fin);
+	close(fout);
+	return res;
+}
+
+/********************************************/
 /*              TEST FUNCTIONS              */
 /********************************************/
 int test_true(PTest test,const char *file) {return 1;}
 int test_false(PTest test,const char *file) {return 0;}
 
 int test_shell(PTest test,const char *file) {
-	FILE *f=fopen(file,"r");
+	int fd=openat(persistent.mirror_fd,file,O_RDONLY);
+	FILE *f=fdopen(fd,"r");
 	if (f==0) return 0;
 	char magic[2];
 	size_t s=fread(magic,1,2,f);
-	fclose(f);
+	close(fd);
 	if (s<2 || magic[0]!='#' || magic[1]!='!') return 0;
 	return 1;
 }
 
 int test_executable(PTest test,const char *file) {
-	return access(file,X_OK)==0;
+	return faccessat(persistent.mirror_fd,file,X_OK,0)==0;
 }
 
 int test_shell_executable(PTest test,const char *file) {
@@ -83,19 +110,31 @@ int test_program(PTest test,const char *file) {
 /*           EXECUTION FUNCTIONS            */
 /********************************************/
 int program_shell(PProgram program,const char *file,int fd) {
-	const char *args[]={file,0};
-	int code=execute_program(file,args,fd,0);
+	char *tmpfil=temp_copy(file);
+	if (tmpfil==0) return -errno;
+	const char *args[]={tmpfil,0};
+	int code=execute_program(tmpfil,args,fd,0);
+	unlink(tmpfil);
+	free(tmpfil);
 	return code;
 }
 
 int program_external(PProgram program,const char *file,int fd) {
-	// Create the array of arguments of the program by replacing the exclamation mark with the name of the file
-	if (program->args!=0 && program->filearg!=0) *(program->filearg)=(char*)file;
+	// Create the array of arguments of the program by replacing the exclamation mark with the name of a file with the same content
+	// The actual file is not used because it may not be accessible for external programs since the host folder can be mounted over with the new file system. To prevent that case, the script file is copied in the temporary folder and this new file name is given as the argument of the external program at the location of the exclamation mark. The temporary file is deleted after the end of the procedure.
+	if (program->args!=0 && program->filearg!=0) *(program->filearg)=temp_copy(file);
 	// If the program is a filter that requires standard input, add the name of the file in the arguments of the call to execute_program
 	const char *f=(program->filter && program->filearg==0)?file:0;
 	// Launch the program
 	int code=execute_program(program->path,(const char**)(program->args),fd,f);
-	if (program->args!=0 && program->filearg!=0) *(program->filearg)=0;
+	// Release memory, restore structure in previous state and exit
+	if (program->args!=0 && program->filearg!=0) {
+		if (*(program->filearg)!=0) {
+			unlink(*(program->filearg));
+			free(*(program->filearg));
+		}
+		*(program->filearg)=0;
+	}
 	return code;
 }
 
@@ -113,12 +152,13 @@ Procedure* get_script(const Procedures *procs,const char *file) {
 
 void call_program(const char *file,const char **args) {
 	// Check the nature of file
-	FILE *f=fopen(file,"r");
+	int fd=openat(persistent.mirror_fd,file,O_RDONLY);
+	FILE *f=fdopen(fd,"r");
 	if (f==0) return;
 	char *line=0;
 	size_t nn;
 	ssize_t n=getline(&line,&nn,f);
-	fclose(f);
+	close(fd);
 	if (n>=2 && line[0]=='#' && line[1]=='!') {	// file is a shell script
 		// Read the path to the script interpretor
 		size_t i=2;
@@ -139,9 +179,11 @@ void call_program(const char *file,const char **args) {
 		j=1;
 		while (j<i+2) {newargs[j]=args[j-1];++j;}
 		// Launch program
-		execvp(path,(char* const*)newargs);
+		int fde=openat(persistent.mirror_fd,path,O_RDONLY);
+		fexecve(fde,(char* const*)newargs,persistent.envp);
 	} else {
-		execvp(file,(char *const*)args);
+		int fde=openat(persistent.mirror_fd,file,O_RDONLY);
+		fexecve(fde,(char *const*)args,persistent.envp);
 	}
 }
 
@@ -154,7 +196,7 @@ int execute_program(const char *file,const char **args,int out,const char* path_
 	if (child!=0) {	// Parent process (caller)
 		if (path_in!=0) {	// If a path is provided, feed the content of the file to the pipe so that it is used as the standard input of the child process
 			close(fds[0]);	// Close input descriptor
-			in=open(path_in,O_RDONLY);
+			in=openat(persistent.mirror_fd,path_in,O_RDONLY);
 			if (in<0) path_in=0; else {	// Copy file to standard input
 				char buffer[0x1000];
 				ssize_t num,numw,num2;

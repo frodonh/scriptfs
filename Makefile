@@ -27,6 +27,10 @@ $(BIN)/$(PROJECT):$(PROJECT).c $(BIN)/procedures.o $(BIN)/operations.o
 	@echo --------------- Linking of executable ---------------
 	@$(CC) $(CFLAGS) -o $(BIN)/$(PROJECT) $^ $(LFLAGS)
 
+$(BIN)/operations.o:operations.h
+
+$(BIN)/procedures.o:procedures.h
+
 $(BIN)/%.o:%.c %.h
 	@echo --------------- Compilation of $< ---------------
 	@$(CC) $(CFLAGS) -c -o $(BIN)/$@ $<

@@ -23,6 +23,8 @@
 
 #include "procedures.h"
 
+#define	FILENAME_MAX_LENGTH 0x400	//!< Maximum length of a path name in the virtual filesystem
+
 /********************************************/
 /*         DATA TYPES AND FUNCTIONS         */
 /********************************************/
@@ -32,8 +34,10 @@
  * This structure holds the persistent data needed for the application to be able to execute scripts properly.
  */
 struct Persistent {
+	char** envp;	//!< Array of environment variables as defined when the program is called
 	char* mirror;	//!< Path to the mirror folder
 	size_t mirror_len;	//!< Length of the mirror string
+	int mirror_fd;	//!< File descriptor of the mirror folder
 	Procedures *procs;	//!< List of procedures describing what to do with files
 } persistent;	//!< Variable holding all the persistent data needed by the application
 
@@ -52,6 +56,8 @@ typedef struct FileStruct {
 		T_FOLDER	//!< Directory
 	} type;	//!< Type of the file
 	int handle;	//!< Handle of the corresponding item on the mirror file system if the system is a file, pointer to the directory flow if the file is actually a directory
+	//int dirfd;	//!< Handle of the directory if the file is a directory. This handle is kept to close the open directory when it is no longer used, but it should not be used by the application
+	char filename[FILENAME_MAX_LENGTH];	//!< Name of the file
 } FileStruct;
 
 /**
@@ -174,7 +180,7 @@ int program_external(PProgram program,const char *file,int fd);
  *
  * This function tests the file in argument and tells if it is a script. It goes through all the procedures in the list given as argument, in the order in which they are stored. As soon as a test succeeds, the file is recognized as a script and a pointer to the corresponding procedure is returned. If no matching procedure is found, the function returns a null pointer. Since it is called very often (each time a folder is explored and a file is opened), it should be very fast and not rely too much on external programs.
  * \param procs List of procedures that will be tested against the file
- * \param file Full path of the actual file
+ * \param file Path of the actual file
  * \return Pointer to a procedure which test function succeeds when applied to the file, null if no procedure is found
  */
 Procedure* get_script(const Procedures *procs,const char *file);
@@ -191,7 +197,7 @@ void call_program(const char *file,const char **args);
 /**
  * \brief Spawn a process that executes an external program
  *
- * This function creates a new process which will execute the external program located at file. The third argument is a file descriptor on which the output will be written. If the descriptor is null, no output will be written at all. The last argument is a full path to a file which content should be provided on the standard input of the external program. If nothing has to be sent to the external program, the user should give a null value to this parameter.
+ * This function creates a new process which will execute the external program located at file. The third argument is a file descriptor on which the output will be written. If the descriptor is null, no output will be written at all. The last argument is a path to a file which content should be provided on the standard input of the external program. If nothing has to be sent to the external program, the user should give a null value to this parameter.
  * \param file Path to the executable file
  * \param args Array of arguments to be added after the name of the program. The array must end with a null pointer. By convention, the first element of the array should be the path of the program itself but this function does not take care of adding the path of the program (file) at the beginning of the array.
  * \param out Descriptor of the file on which the output will be redirected, 0 if no output is required

@@ -30,6 +30,7 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sysexits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
@@ -57,6 +58,26 @@ void print_usage(int code) {
 	printf("	mirror_folder\n\t\tActual folder on the disk that will be the base folder of the mounted structure\n");
 	printf("	mount_point\n\t\tFolder that will be used as the mount point\n");
 	exit(code);
+}
+
+/**
+ * \brief Transform an absolute path in the virtual file system in a path relative to the mirror file system
+ *
+ * This function converts an absolute path name in the virtual mounted file system in a relative pathname in the mirror underlying file system. If the pathname is "/", it replaces it with ".". Otherwise it removes the initial slash. The function returns a new string and leaves the user program the responsibility to release it.
+ * \param path Absolute path in the virtual file system
+ * \return Relative path in the mirror file system
+ */
+char *relative_path(const char *path) {
+	if (path==0 || path[0]==0) return 0;
+	char *res;	
+	if (path[0]=='/' && path[1]==0) {
+		res=(char*)malloc(2*sizeof(char));
+		res[0]='.';res[1]=0;
+		return res;
+	}
+	res=(char*)malloc(strlen(path));
+	strcpy(res,path+1);
+	return res;
 }
 
 /**
@@ -131,12 +152,10 @@ int sfs_getattr(const char *path,struct stat *stbuf) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_getattr(%s)\n",path);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
-	int code=lstat(fullpath,stbuf);
-	if (code==0 && S_ISREG(stbuf->st_mode) && (stbuf->st_mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && get_script(persistent.procs,fullpath)!=0) stbuf->st_mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));	// If the file is a script, remove write access to everyone (for now we don't handle writing on scripts)
+	char *relative=relative_path(path);
+	int code=fstatat(persistent.mirror_fd,relative,stbuf,AT_SYMLINK_NOFOLLOW);
+	if (code==0 && S_ISREG(stbuf->st_mode) && (stbuf->st_mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && get_script(persistent.procs,path)!=0) stbuf->st_mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));   // If the file is a script, remove write access to everyone (for now we don't handle writing on scripts)
+	free(relative);
 	return (code==0)?0:-errno;
 }
 
@@ -155,7 +174,7 @@ int sfs_fgetattr(const char *path,struct stat *stbuf,struct fuse_file_info *fi) 
 #endif
 	if (fi==0 || fi->fh==0) return -EBADF;
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
-	int code=fstat(fs->handle,stbuf);
+	int code=fstatat(persistent.mirror_fd,fs->filename,stbuf,0);
 	if (code==0 && S_ISREG(stbuf->st_mode) && (stbuf->st_mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && fs->type==T_SCRIPT) stbuf->st_mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));	// If the file is a script, remove write access to everyone (for now we don't handle writing on scripts)
 	return (code==0)?0:-errno;
 }
@@ -172,17 +191,15 @@ int sfs_access(const char *path,int mask) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_access(%s,%o)\n",path,mask);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
-	int code=access(fullpath,mask);
+	char *relative=relative_path(path);
+	int code=faccessat(persistent.mirror_fd,relative,mask,0);
 	if (code==0 && (mask & W_OK)!=0) {	// If write-acess is requested, check if the file is a regular file and not a script, because for the moment we don't handle writing on scripts
 		struct stat stbuf;
-		int code2=stat(fullpath,&stbuf);
-		if (code2!=0) return -code2;	// Normally, that should not happen
-		if (S_ISREG(stbuf.st_mode) && get_script(persistent.procs,fullpath)!=0) return -1;
+		int code2=fstatat(persistent.mirror_fd,relative,&stbuf,0);
+		if (code2!=0) {free(relative);return -code2;}	// Normally, that should not happen
+		if (S_ISREG(stbuf.st_mode) && get_script(persistent.procs,relative)!=0) {free(relative);return -1;}
 	}
+	free(relative);
 	return (code==0)?0:-errno;
 }
 
@@ -200,11 +217,9 @@ int sfs_readlink(const char *path,char *buf,size_t size) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_readlink(%s,%p,%zi)\n",path,(void*)buf,size);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
-	ssize_t length=readlink(fullpath,buf,size-1);
+	char *relative=relative_path(path);
+	ssize_t length=readlinkat(persistent.mirror_fd,relative,buf,size-1);
+	free(relative);
 	if (length<0) return -errno;
 	buf[length]=0;
 	return 0;
@@ -222,16 +237,18 @@ int sfs_opendir(const char *path,struct fuse_file_info *fi) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_opendir(%s,%p)\n",path,(fi==0)?0:(void*)(long)(fi->fh));
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
-	DIR* handle=opendir(fullpath);
-	if (handle==0) return -errno;
+	char *relative=relative_path(path);
+	int fd=openat(persistent.mirror_fd,relative,O_RDONLY);
+	if (fd<0) {free(relative);return -errno;}
+	DIR* handle=fdopendir(fd);
+	if (handle==0) {free(relative);return -errno;}
 	FileStruct *fs=(FileStruct*)malloc(sizeof(FileStruct));
 	fs->type=T_FOLDER;
 	fs->handle=(long)(handle);
+	strncpy(fs->filename,relative,FILENAME_MAX_LENGTH-1);
+	fs->filename[FILENAME_MAX_LENGTH-1]=0;
 	fi->fh=(long)(fs);
+	free(relative);
 	return 0;
 }
 
@@ -297,11 +314,9 @@ int sfs_mkdir(const char *path,mode_t mode) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_mkdir(%s,%X)\n",path,mode);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
-	int code=mkdir(fullpath,mode);
+	char *relative=relative_path(path);
+	int code=mkdirat(persistent.mirror_fd,relative,mode);
+	free(relative);
 	return (code==0)?0:-errno;
 }
 
@@ -316,11 +331,9 @@ int sfs_rmdir(const char *path) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_rmdir(%s)\n",path);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
-	int code=rmdir(fullpath);
+	char *relative=relative_path(path);
+	int code=unlinkat(persistent.mirror_fd,relative,AT_REMOVEDIR);
+	free(relative);
 	return (code==0)?0:-errno;
 }
 
@@ -336,15 +349,9 @@ int sfs_symlink(const char* to,const char *from) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_symlink(%s,%s)\n",to,from);
 #endif
-	size_t path_len=strlen(to);
-	char fullto[persistent.mirror_len+path_len+1];
-	strcpy(fullto,persistent.mirror);
-	strcpy(fullto+persistent.mirror_len,to);
-	path_len=strlen(from);
-	char fullfrom[persistent.mirror_len+path_len+1];
-	strcpy(fullfrom,persistent.mirror);
-	strcpy(fullfrom+persistent.mirror_len,from);
-	int code=symlink(fullfrom,fullto);
+	char *relative=relative_path(to);
+	int code=symlinkat(from,persistent.mirror_fd,relative);
+	free(relative);
 	return (code==0)?0:-errno;
 }
 
@@ -359,11 +366,9 @@ int sfs_unlink(const char *path) {
 #ifdef  TRACE
 	fprintf(stderr,"sfs_unlink(%s)\n",path);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
-	int code=unlink(fullpath);
+	char *relative=relative_path(path);
+	int code=unlinkat(persistent.mirror_fd,relative,0);
+	free(relative);
 	return (code==0)?0:-errno;
 }
 
@@ -379,15 +384,11 @@ int sfs_link(const char* from,const char *to) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_symlink(%s,%s)\n",from,to);
 #endif
-	size_t path_len=strlen(to);
-	char fullto[persistent.mirror_len+path_len+1];
-	strcpy(fullto,persistent.mirror);
-	strcpy(fullto+persistent.mirror_len,to);
-	path_len=strlen(from);
-	char fullfrom[persistent.mirror_len+path_len+1];
-	strcpy(fullfrom,persistent.mirror);
-	strcpy(fullfrom+persistent.mirror_len,from);
-	int code=symlink(fullfrom,fullto);
+	char *relative_from=relative_path(from);
+	char *relative_to=relative_path(to);
+	int code=linkat(persistent.mirror_fd,relative_from,persistent.mirror_fd,relative_to,0);
+	free(relative_from);
+	free(relative_to);
 	return (code==0)?0:-errno;
 }
 
@@ -403,15 +404,11 @@ int sfs_rename(const char *from,const char *to) {
 #ifdef  TRACE
 	fprintf(stderr,"sfs_rename(%s,%s)\n",from,to);
 #endif
-	size_t path_len=strlen(to);
-	char fullto[persistent.mirror_len+path_len+1];
-	strcpy(fullto,persistent.mirror);
-	strcpy(fullto+persistent.mirror_len,to);
-	path_len=strlen(from);
-	char fullfrom[persistent.mirror_len+path_len+1];
-	strcpy(fullfrom,persistent.mirror);
-	strcpy(fullfrom+persistent.mirror_len,from);
-	int code=rename(fullfrom,fullto);
+	char *relative_from=relative_path(from);
+	char *relative_to=relative_path(to);
+	int code=renameat(persistent.mirror_fd,relative_from,persistent.mirror_fd,relative_to);
+	free(relative_from);
+	free(relative_to);
 	return (code==0)?0:-errno;
 }
 
@@ -427,14 +424,12 @@ int sfs_chmod(const char *path,mode_t mode) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_chmod(%s,%X)\n",path,mode);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
+	char *relative=relative_path(path);
 	struct stat stbuf;
-	int code=stat(fullpath,&stbuf);
-	if (code==0 && S_ISREG(stbuf.st_mode) && (mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && get_script(persistent.procs,fullpath)!=0) mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));	// If the file is a script, remove write access to the requested permissions
-	code=chmod(fullpath,mode);
+	int code=fstatat(persistent.mirror_fd,relative,&stbuf,0);
+	if (code==0 && S_ISREG(stbuf.st_mode) && (mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && get_script(persistent.procs,relative)!=0) mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));	// If the file is a script, remove write access to the requested permissions
+	code=fchmodat(persistent.mirror_fd,relative,mode,0);
+	free(relative);
 	return (code==0)?0:-errno;
 }
 
@@ -450,14 +445,15 @@ int sfs_truncate(const char *path,off_t size) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_truncate(%s,%li)\n",path,(long)size);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
+	char *relative=relative_path(path);
 	struct stat stbuf;
-	int code=stat(fullpath,&stbuf);
-	if (code==0 && S_ISREG(stbuf.st_mode) && get_script(persistent.procs,fullpath)!=0) return -EACCES;	// Writing on a script is forbidden
-	code=truncate(fullpath,size);
+	int code=fstatat(persistent.mirror_fd,relative,&stbuf,0);
+	if (code==0 && S_ISREG(stbuf.st_mode) && get_script(persistent.procs,relative)!=0) {free(relative);return -EACCES;}	// Writing on a script is forbidden
+	int fd=openat(persistent.mirror_fd,relative,O_WRONLY);
+	free(relative);
+	if (fd<0) return -errno;
+	code=ftruncate(fd,size);
+	close(fd);
 	return (code==0)?0:-errno;
 }
 
@@ -494,14 +490,12 @@ int sfs_utimens(const char *path,const struct timespec ts[2]) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_utimens(%s)\n",path);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
+	char *relative=relative_path(path);
 	struct stat stbuf;
-	int code=stat(fullpath,&stbuf);
-	if (code==0 && S_ISREG(stbuf.st_mode) && get_script(persistent.procs,fullpath)!=0) return -EACCES;	// Writing on a script is forbidden
-	code=utimensat(AT_FDCWD,fullpath,ts,0);
+	int code=fstatat(persistent.mirror_fd,relative,&stbuf,0);
+	if (code==0 && S_ISREG(stbuf.st_mode) && get_script(persistent.procs,relative)!=0) {free(relative);return -EACCES;}	// Writing on a script is forbidden
+	code=utimensat(persistent.mirror_fd,relative,ts,0);
+	free(relative);
 	return (code==0)?0:-errno;
 }
  
@@ -533,30 +527,32 @@ int sfs_open(const char *path,struct fuse_file_info *fi) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_open(%s)\n",path);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
 	int handle=0;
 	int typ=0;
-	Procedure *proc=get_script(persistent.procs,fullpath);
+	char *relative=relative_path(path);
+	Procedure *proc=get_script(persistent.procs,relative);
 	if (proc!=0) {	// If the file is a script, the interpretor is executed to produce the result of the script
-		if ((fi->flags & O_WRONLY)!=0 || (fi->flags & O_RDWR)!=0) return -EACCES; 	// If the caller requests to open the file in one of the write modes, immediatly abort the opening
+		if ((fi->flags & O_WRONLY)!=0 || (fi->flags & O_RDWR)!=0) {free(relative);return -EACCES;} 	// If the caller requests to open the file in one of the write modes, immediatly abort the opening
 		char temp_filename[]="/tmp/sfs.XXXXXX";
 		handle=mkstemp(temp_filename);
-		if (handle<=0) return -errno;
+		if (handle<=0) {free(relative);return -errno;}
 		unlink(temp_filename);
-		proc->program->func(proc->program,fullpath,handle);
+		proc->program->func(proc->program,relative,handle);
 		typ=1;
+		fi->direct_io=1;	// Force use of FUSE read on this file and do not take into account size given by the stat function
 	} else {
-		handle=open(fullpath,fi->flags);
-		if (handle<=0) return -errno;
+		handle=openat(persistent.mirror_fd,relative,fi->flags);
+		if (handle<=0) {free(relative);return -errno;}
 		typ=2;
+		fi->direct_io=0;	// Authorize direct translation of FUSE IO calls to system calls
 	}
 	FileStruct *fs=(FileStruct*)malloc(sizeof(FileStruct));
 	fs->type=(typ==1)?T_SCRIPT:T_FILE;
 	fs->handle=handle;
+	strncpy(fs->filename,relative,FILENAME_MAX_LENGTH-1);
+	fs->filename[FILENAME_MAX_LENGTH-1]=0;
 	fi->fh=(long)fs;
+	free(relative);
 	return 0;
 }
 
@@ -681,17 +677,17 @@ int sfs_create(const char *path,mode_t mode,struct fuse_file_info *fi) {
 #ifdef TRACE
 	fprintf(stderr,"sfs_create(%s,%X)\n",path,mode);
 #endif
-	size_t path_len=strlen(path);
-	char fullpath[persistent.mirror_len+path_len+1];
-	strcpy(fullpath,persistent.mirror);
-	strcpy(fullpath+persistent.mirror_len,path);
 	int handle=0;
-	handle=creat(fullpath,mode);
-	if (handle<=0) return -errno;
+	char *relative=relative_path(path);
+	handle=openat(persistent.mirror_fd,relative,O_CREAT | O_WRONLY | O_TRUNC,mode);
+	if (handle<=0) {free(relative);return -errno;}
 	FileStruct *fs=(FileStruct*)malloc(sizeof(FileStruct));
 	fs->type=T_FILE;
 	fs->handle=handle;
+	strncpy(fs->filename,relative,FILENAME_MAX_LENGTH-1);
+	fs->filename[FILENAME_MAX_LENGTH-1]=0;
 	fi->fh=(long)fs;
+	free(relative);
 	return 0;
 }
 
@@ -744,10 +740,11 @@ struct fuse_operations sfs_oper = {
  * \param argv Array of command line arguments, the first one being the path to the calling program
  * \return Error code, 0 if everything went fine
  */
-int main(int argc,char **argv) {
+int main(int argc,char **argv,char **envp) {
 	// Get system information
 	uid=geteuid();
 	gid=getegid();
+	persistent.envp=envp;
 	// Parse command line arguments
 	init_resources();
 	size_t i,j;
@@ -755,7 +752,7 @@ int main(int argc,char **argv) {
 	for (i=1;i<argc && argv[i][0]=='-';++i) {
 		if (argv[i][1]=='o') ++i;	// Skip -o options parameters
 		else if (argv[i][1]=='p') { // Parse -p options parameters
-			if (i>=argc-1) print_usage(EINVAL);
+			if (i>=argc-1) print_usage(EX_USAGE);
 			Procedure *proc=get_procedure_from_string(argv[i+1]);
 			if (proc!=0) {
 				Procedures *procs=(Procedures*)malloc(sizeof(Procedures));
@@ -769,11 +766,18 @@ int main(int argc,char **argv) {
 			--i;
 		}
 	}
-	if ((argc-i)!=2) print_usage(EINVAL);
+	if ((argc-i)!=2) print_usage(EX_USAGE);
 	persistent.mirror=realpath(argv[i],0);
 	persistent.mirror_len=strlen(persistent.mirror);
 	argv[i]=argv[i+1];
 	argc--;
+	// Open mirror directory
+	persistent.mirror_fd=open(persistent.mirror,O_RDONLY);
+	if (persistent.mirror_fd<0) {
+		fprintf(stderr,"Can't open mirror folder: %s\n",persistent.mirror);
+		free_resources();
+		return EX_NOPERM;
+	}
 	// Check if no valid procedure was set. In that case, automatically provide a standard procedure
 	if (persistent.procs==0) {
 		persistent.procs=(Procedures*)malloc(sizeof(Procedures));
@@ -788,5 +792,6 @@ int main(int argc,char **argv) {
 	// Daemonize the program
 	int code=fuse_main(argc,argv,&sfs_oper,0);
 	free_resources();
+	close(persistent.mirror_fd);
 	return code;
 }
