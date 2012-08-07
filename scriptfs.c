@@ -154,7 +154,7 @@ int sfs_getattr(const char *path,struct stat *stbuf) {
 #endif
 	char *relative=relative_path(path);
 	int code=fstatat(persistent.mirror_fd,relative,stbuf,AT_SYMLINK_NOFOLLOW);
-	if (code==0 && S_ISREG(stbuf->st_mode) && (stbuf->st_mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && get_script(persistent.procs,path)!=0) stbuf->st_mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));   // If the file is a script, remove write access to everyone (for now we don't handle writing on scripts)
+	if (code==0 && S_ISREG(stbuf->st_mode) && (stbuf->st_mode & (S_IWUSR | S_IWGRP | S_IWOTH))!=0 && get_script(persistent.procs,relative)!=0) stbuf->st_mode&= (~(S_IWUSR | S_IWGRP | S_IWOTH));   // If the file is a script, remove write access to everyone (for now we don't handle writing on scripts)
 	free(relative);
 	return (code==0)?0:-errno;
 }
