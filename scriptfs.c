@@ -244,7 +244,7 @@ int sfs_opendir(const char *path,struct fuse_file_info *fi) {
 	if (handle==0) {free(relative);return -errno;}
 	FileStruct *fs=(FileStruct*)malloc(sizeof(FileStruct));
 	fs->type=T_FOLDER;
-	fs->handle=(long)(handle);
+	fs->dir_handle=(void*)handle;
 	strncpy(fs->filename,relative,FILENAME_MAX_LENGTH-1);
 	fs->filename[FILENAME_MAX_LENGTH-1]=0;
 	fi->fh=(long)(fs);
@@ -270,7 +270,7 @@ int sfs_readdir(const char *path,void *buf,fuse_fill_dir_t filler,off_t offset,s
 	if (fi==0 || fi->fh==0) return -EBADF;
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
 	if (fs->type!=T_FOLDER) return -ENOTDIR;
-	DIR *handle=(DIR*)(fs->handle);
+	DIR *handle=(DIR*)(fs->dir_handle);
 	struct dirent* entry;
 	do {
 		errno=0;
@@ -296,7 +296,7 @@ int sfs_releasedir(const char *path,struct fuse_file_info *fi) {
 	if (fi==0 || fi->fh==0) return -EBADF;
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
 	if (fs->type!=T_FOLDER) return -ENOTDIR;
-	DIR *handle=(DIR*)(fs->handle);
+	DIR *handle=(DIR*)(fs->dir_handle);
 	free(fs);
 	int code=closedir(handle);
 	return (code==0)?0:-errno;
@@ -474,7 +474,7 @@ int sfs_ftruncate(const char *path,off_t size,struct fuse_file_info *fi) {
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
 	if (fs->type==T_FOLDER) return -EISDIR;
 	if (fs->type==T_SCRIPT) return -EACCES;	// Writing on a script is forbidden
-	int code=ftruncate(fs->handle,size);
+	int code=ftruncate(fs->file_handle,size);
 	return (code==0)?0:-errno;
 }
 
@@ -548,7 +548,7 @@ int sfs_open(const char *path,struct fuse_file_info *fi) {
 	}
 	FileStruct *fs=(FileStruct*)malloc(sizeof(FileStruct));
 	fs->type=(typ==1)?T_SCRIPT:T_FILE;
-	fs->handle=handle;
+	fs->file_handle=handle;
 	strncpy(fs->filename,relative,FILENAME_MAX_LENGTH-1);
 	fs->filename[FILENAME_MAX_LENGTH-1]=0;
 	fi->fh=(long)fs;
@@ -574,9 +574,9 @@ int sfs_read(const char *path,char *buf,size_t size,off_t offset,struct fuse_fil
 	if (fi==0 || fi->fh==0) return -EBADF;
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
 	if (fs->type==T_FOLDER) return -EISDIR;
-	off_t res=lseek(fs->handle,offset,SEEK_SET);
+	off_t res=lseek(fs->file_handle,offset,SEEK_SET);
 	if (res<0) return -errno;
-	ssize_t num=read(fs->handle,buf,size);
+	ssize_t num=read(fs->file_handle,buf,size);
 	if (num>=0) return num; else return -errno;
 }
 
@@ -598,9 +598,9 @@ int sfs_write(const char *path,const char *buf,size_t size,off_t offset,struct f
 	if (fi==0 || fi->fh==0) return -EBADF;
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
 	if (fs->type==T_FOLDER) return -EISDIR;
-	off_t res=lseek(fs->handle,offset,SEEK_SET);
+	off_t res=lseek(fs->file_handle,offset,SEEK_SET);
 	if (res<0) return -errno;
-	ssize_t num=write(fs->handle,buf,size);
+	ssize_t num=write(fs->file_handle,buf,size);
 	if (num>=0) return num; else return -errno;
 }
 
@@ -619,7 +619,7 @@ int sfs_release(const char *path,struct fuse_file_info *fi) {
 	if (fi==0 || fi->fh==0) return -EBADF;
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
 	if (fs->type==T_FOLDER) return -EISDIR;
-	int code=close(fs->handle);
+	int code=close(fs->file_handle);
 	free(fs);
 	return (code==0)?0:-errno;
 }
@@ -640,7 +640,7 @@ int sfs_fsync(const char *path,int isdatasync,struct fuse_file_info *fi) {
 	if (fi==0 || fi->fh==0) return -EBADF;
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
 	if (fs->type==T_FOLDER) return -EISDIR;
-	int code=fsync(fs->handle);
+	int code=fsync(fs->file_handle);
 	return (code==0)?0:-errno;
 }
 
@@ -660,7 +660,7 @@ int sfs_flush(const char *path,struct fuse_file_info *fi) {
 	FileStruct *fs=(FileStruct*)(long)(fi->fh);
 	if (fs->type==T_FOLDER) return -EISDIR;
 	if (fs->type==T_SCRIPT) return 0;
-	int code=fsync(fs->handle);
+	int code=fsync(fs->file_handle);
 	return (code==0)?0:-errno;
 }
 
@@ -683,7 +683,7 @@ int sfs_create(const char *path,mode_t mode,struct fuse_file_info *fi) {
 	if (handle<=0) {free(relative);return -errno;}
 	FileStruct *fs=(FileStruct*)malloc(sizeof(FileStruct));
 	fs->type=T_FILE;
-	fs->handle=handle;
+	fs->file_handle=handle;
 	strncpy(fs->filename,relative,FILENAME_MAX_LENGTH-1);
 	fs->filename[FILENAME_MAX_LENGTH-1]=0;
 	fi->fh=(long)fs;

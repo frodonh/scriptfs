@@ -55,7 +55,8 @@ typedef struct FileStruct {
 		T_SCRIPT,	//!< Script file (detected in such a way by the file system, so it should not be overwritten)
 		T_FOLDER	//!< Directory
 	} type;	//!< Type of the file
-	int handle;	//!< Handle of the corresponding item on the mirror file system if the system is a file, pointer to the directory flow if the file is actually a directory
+	int file_handle;	//!< Handle of the corresponding item on the mirror file system if the system is a file
+	void* dir_handle; //!< Pointer to the directory flow if the file is actually a directory
 	//int dirfd;	//!< Handle of the directory if the file is a directory. This handle is kept to close the open directory when it is no longer used, but it should not be used by the application
 	char filename[FILENAME_MAX_LENGTH];	//!< Name of the file
 } FileStruct;
