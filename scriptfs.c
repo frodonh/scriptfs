@@ -781,12 +781,19 @@ int main(int argc,char **argv,char **envp) {
 	// Check if no valid procedure was set. In that case, automatically provide a standard procedure
 	if (persistent.procs==0) {
 		persistent.procs=(Procedures*)malloc(sizeof(Procedures));
+		persistent.procs->procedure=(Procedure*)malloc(sizeof(Procedure));
 		persistent.procs->procedure->program=(Program*)malloc(sizeof(Program));
 		persistent.procs->procedure->program->path=0;
 		persistent.procs->procedure->program->args=0;
 		persistent.procs->procedure->program->filearg=0;
 		persistent.procs->procedure->program->func=&program_shell;
-		persistent.procs->procedure->test=0;
+		persistent.procs->procedure->test=(Test*)malloc(sizeof(Test));
+		persistent.procs->procedure->test->func=&test_shell_executable;
+		persistent.procs->procedure->test->path=0;
+		persistent.procs->procedure->test->args=0;
+		persistent.procs->procedure->test->filearg=0;
+		persistent.procs->procedure->test->filter=0;
+		persistent.procs->procedure->test->compiled=0;
 		persistent.procs->next=0;
 	}
 	// Daemonize the program
